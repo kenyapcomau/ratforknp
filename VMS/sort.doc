@@ -1,0 +1,102 @@
+.bp 1
+.in 0
+.he 'SORT (1)'04/15/78'SORT (1)
+.fo ''-#-''
+.fi
+.in 7
+.ti -7
+.br
+NAME
+.br
+sort - sort and/or merge text files
+
+.ti -7
+SYNOPSIS
+.br
+sort [-bdfimr] [+sn] [file] ...
+
+.ti -7
+DESCRIPTION
+.br
+Sort sorts lines of all the named files together and writes the result
+on the standard output.
+If no files are given or the filename '-' appears, standard input
+is read.
+
+The sort key is an entire line.
+Default ordering is alphabetic by characters as they are represented
+in ASCII format.
+The ordering is affected by the
+following flags, one or more of which may appear.
+
+.in +4
+.ti -3
+-b Leading blanks  are not included in keys.
+
+.ti -3
+-d 'Dictionary' order: only letters, digits and blanks are significant
+in comparisons.
+
+.ti -3
+-f Fold all letters to a single case.
+
+.ti -3
+-i Ignore all nonprinting nonblank characters.
+
+.ti -3
+-m Merge only, the input files are already sorted.
+
+.ti -3
+-r Reverse the sense of the sort
+
+.ti -4
++sn Sort according to the subfield starting on column n
+
+.in -4
+
+.ti -7
+FILES
+.br
+A series of scratch files are generated and subsequently deleted.
+Presently the files are named "Sn" where "n" is a sequence number.
+
+.ti -7
+SEE ALSO
+.br
+tsort
+.br
+The Unix command "sort" in the Unix User's Manual.
+.br
+
+.ti -7
+DIAGNOSTICS
+.br
+file:  can't open
+.br
+.in +5
+This message is printed if either an input file or a scratch
+file cannot be opened; execution ceases.
+.in -5
+.sp
+too many arguments
+.in +5
+Printed if too many files are specified on the command line.
+The limit is determined by the FLMAX definition in the source code.
+.in -5
+
+.ti -7
+AUTHORS
+.br
+Original design from Kernighan and Plauger's "Software Tools",
+with modifications by
+Joe Sventek (Lawrence Berkeley Laboratory).
+
+.ti -7
+BUGS
+.br
+The merge phase is performed with a polyphase merge/sort algorithm,
+which requires an end-of-run delimiter on the scratch files.
+The one chosen is
+a bare ^D (ASCII code 4) on a line.  If this is in conflict with your
+data files, the symbol CTRLD in the sort symbol definitions
+should be redefined.

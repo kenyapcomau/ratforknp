@@ -1,0 +1,82 @@
+.bp 1
+.in 0
+.he 'COMM (1)'1/11/79'COMM (1)'
+.fo ''-#-'
+.fi
+NAME
+.br
+.in 7
+comm - print lines common to two files
+.sp 1
+.in
+SYNOPSIS
+.br
+.in 7
+comm
+[-123] file1 file2
+.sp 1
+.in
+DESCRIPTION
+.br
+.in 7
+Comm
+reads
+file1
+and
+file2,
+which should be sorted, and produces a three column output:
+lines only in
+file1,
+lines only in
+file2,
+and lines in both files.
+The filename '-' means the standard input.
+If there is only one file argument,
+file2
+refers to the standard input.
+
+The optional arguments -1, -2, and -3 specify the printing of
+only the corresponding column.
+Thus
+comm -3
+prints only the lines common to both files, and
+comm -12
+prints lines which are in either file, but not in both.
+The default is -123.
+.sp 1
+.in
+FILES
+.br
+.in 7
+None
+.sp 1
+.in
+SEE ALSO
+.br
+.in 7
+diff
+.sp 1
+.in
+DIAGNOSTICS
+.br
+.in 7
+A message is printed if an input file cannot be opened.
+.sp 1
+.in
+AUTHORS
+.br
+.in 7
+.sp 1
+Debbie Scherrer (Lawrence Berkeley Laboratory)
+.sp 1
+.in
+BUGS
+.br
+.in 7
+The flags used by this tool are the reverse of those used by the
+Unix 'comm'.  In Unix, the flags 1, 2, and 3
+.bd
+suppress
+printing of the corresponding column.
+Kernighan, on page 126 of 'Software Tools' suggests the
+version used above.

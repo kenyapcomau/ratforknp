@@ -1,0 +1,151 @@
+.tc _
+.de s3
+.sp 1
+.ti +5
+..
+.he 'Runoff''User Documentation'
+.fo ''- % -''
+.s3
+Runoff
+formats text according to control lines embedded
+in the text in the given file.
+Input consists of intermixed
+"text lines,"
+which contain information to be formatted, and
+"request lines,"
+which contain instructions about how to format
+it.
+Request lines begin with a distinguished
+"control character,"
+normally a period.
+.s3
+Output lines may be
+filled
+as nearly as possible with words without regard to
+input lineation.
+Line
+breaks
+may be caused at specified places by
+certain commands.
+.s3
+The capabilities of
+runoff
+are specified in the attached request summary.
+Numerical values are denoted there by n or +n,
+titles by t, and single characters by c.
+Numbers denoted +n may be signed + or -,
+in which case they signify relative changes to
+a quantity, otherwise they signify
+an absolute resetting.
+Missing n fields are ordinarily taken to be 1,
+missing t fields to be empty, and c fields to shut off
+the appropriate special interpretation.
+.s3
+Running titles usually appear at top and bottom of every
+page.
+they are set by requests like
+.sp
+.in +10
+ .he 'Part1'Part2'Part3'
+.in -10
+.s3
+Part1 is left justified, Part2 is centered,
+and Part3 is right justified on the page.
+Any % sign in a title is replaced by the current
+page number.
+Any nonblank may serve as a quote.
+.bp
+.ce
+Request Summary
+.sp
+.ta 5 10 18 30
+Request_Break_Initial_Meaning
+.sp
+.in 30
+.cc ,
+,ti 0
+.ad__yes_yes_Begin adjusting right margins.
+,ti 0
+.ar__no_arabic_Arabic page numbers.
+,ti 0
+.bl_n_yes_-_Insert of n blank lines, on new page
+if necessary.
+,ti 0
+.bp_+n_yes_n=1_Begin new page and number it n;
+no n means '+1'.
+,ti 0
+.br__yes_-_Causes a line break - the filling of the
+current line is stopped.
+,ti 0
+.cc_c_no_c=._Control character becomes 'c'.
+,ti 0
+.ce_n_yes_-_Center the next n input lines, without filling.
+,ti 0
+.de_xx_no_-_Define parameterless macro to be invoked
+by request '.xx' (definition ends on line
+beginning '..').
+,ti 0
+.fi__yes_yes_Begin filling output lines.
+,ti 0
+.fo_t_no_t='''_All foot titles are t.
+,ti 0
+.he_t_no_t='''_All head titles are t.
+,ti 0
+.in_+n_yes_-_Indent n spaces from left margin.
+,ti 0
+.ix_+n_no_-_Same as '.in' but without break.
+,ti 0
+.li_n_no_-_Literal, treat next n lines as text.
+,ti 0
+.ll_+n_no_n=65_Line length including indent is n characters.
+,ti 0
+.ls_+n_yes_n=1_Line spacing set to n lines per output line.
+,ti 0
+.m1_n_no_n=2_N blank lines from the top of page including
+head title.
+,ti 0
+.m2_n_no_n=2_N blank lines put between head title and
+beginning of text on page.
+,ti 0
+.m3_n_no_n=1_N blank lines put between end of text and
+foot title.
+,ti 0
+.m4_n_no_n=2_N blank lines including the foot title to
+the bottom of page.
+,ti 0
+.na__yes_no_Stop adjusting the right margin.
+,ti 0
+.ne_n_no_-_Begin new page, if n output lines cannot fit
+on present page.
+,ti 0
+.nf__yes_no_Stop filling output lines.
+,ti 0
+.pl_+n_no_n=66_Total paper length taken to be n lines.
+,ti 0
+.po_+n_no_n=0_Page offset, all lines are preceded by n spaces.
+,ti 0
+.re_n_yes_n=1_Restore environment n levels back.
+,ti 0
+.ro__no_arabic_Roman page numbers.
+,ti 0
+.se__no_-_Save current environment. The environment
+consists of the settings affected by the
+following commands: .ad,.ar,.cc,.ce,.fi,.in,
+.ll,.ls,.po,.ro,.ta,.tc,.ti,.ub,.ul.
+,ti 0
+.sk_n_no_-_Produce n blank pages starting next page.
+,ti 0
+.sp_n_yes_-_Insert block of n blank lines, except at top
+of page.
+,ti 0
+.ta_+n*_no_8,16,.._Pseudotab stops are at n1,n2,n3,...
+,ti 0
+.tc_c_no_c=tab_Pseudotab character is c.
+,ti 0
+.ti_+n_yes_-_Temporarily indent next output line n spaces.
+,ti 0
+.ub_c_no_c=blank_Unpaddable blank character is c.
+,ti 0
+.ul_n_no_-_Underline the letters and numbers in the next
+n input lines.
+,cc .

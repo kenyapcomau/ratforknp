@@ -1,0 +1,636 @@
+#-h-  sort.r                    15476  local   12/24/80  14:56:02
+#-h-  sort                       2995  local   12/24/80  14:43:54
+ # include ratdef
+ # definitions for sort tool
+ # used only by the sort tool
+
+ define(LOGPTR,20)
+ define(MAXPTR,750)
+ define(MAXTEXT,20000)
+ define(TAPENO,6)
+ define(CTRLD,4)
+ define(FLMAX,25)
+ define(EOI,ERR)
+
+ DRIVER(sort)
+ #  (dummy routine necessary for proper returning from main
+ #  sort driver)
+ call sorts
+ DRETURN
+ end
+
+ subroutine sorts
+
+ integer nlines, sum, i, n, getlin, eor, open, outfil, ieof, j
+ integer status, makrun, sunit, nruns
+ character buf(MAXLINE)
+
+ include "select.i"
+ include "csort.i"
+
+ call srtint
+
+ status = OK
+ nruns = 0
+ repeat
+    {
+    if (status == OK)           # haven't reached EOI yet
+        {
+        status = makrun(nlines)                 # make a run
+        nruns = nruns + 1       # update number of runs
+        if (merg == NO)
+            call quick(linptr, nlines, linbuf)  # sort run
+        if (nruns == 1)
+            if (status == EOI)                  # internal sort only
+                {
+ #              call redout             # redirect STDOUT if necessary
+                call putrun(linptr, nlines, linbuf, STDOUT)
+                return
+                }
+            else
+                call fsetup                     # set up temporary files
+        }
+    else
+        nlines = 0
+    if (sum(d, TAPENO-1) > 0 | nlines > 0)
+        {
+        call stape
+        if (a(tape) > 1)
+            call puteor(unit(tape))
+        call putrun(linptr, nlines, linbuf, unit(tape))
+        }
+    }
+ until (sum(d, TAPENO-1) == 0 & status == EOI)
+
+ #      open files for merge
+
+ for (i=1; i < TAPENO; i=i+1)
+    {
+    t(i) = i
+    call close(unit(i))         #change from WRITE to READ access
+    unit(i) = open(file(1,i), READ)
+    if (unit(i) == ERR)
+        call cant(file(1,i))
+    }
+ unit(TAPENO) = open(file(1,TAPENO), WRITE)
+ if (unit(TAPENO) == ERR)
+    call cant(file(1,TAPENO))
+ t(TAPENO) = TAPENO
+
+ #      now merge runs
+
+ repeat
+    {
+    outfil = t(TAPENO)
+    if (level == 1)
+        {
+        sunit = unit(outfil)            # save scratch unit
+ #      call redout                     # redirect STDOUT if necessary
+        unit(outfil) = STDOUT           # copy sorted file directly to STDOUT
+        }
+    repeat
+        {
+        call mrgrun(ieof)
+        if (ieof == 0)
+            call puteor(unit(outfil))
+        }
+    until(ieof > 0)             # one of the units terminated on EOF
+    if (level == 1)
+        {
+        unit(outfil) = sunit    # restore scratch unit
+        break                   # stop loop, sorted file already on STDOUT
+        }
+    i = t(ieof)
+    j = t(TAPENO)
+    call close(unit(i))         #change file accesses
+    unit(i) = open(file(1,i), WRITE)
+    if (unit(i) == ERR)
+        call cant(file(1,i))
+    call close(unit(j))
+    unit(j) = open(file(1,j), READ)
+    if (unit(j) == ERR)
+        call cant(file(1,j))
+    t(TAPENO) = i
+    t(ieof) = j
+    level = level - 1
+    }
+ until (level == 0)             # sorted results on t(ieof)
+
+ #      eliminate temporary files
+
+ call cleans
+ return
+ end
+#-t-  sort                       2995  local   12/24/80  14:43:54
+#-h-  cleans                      194  local   12/24/80  14:43:55
+ subroutine cleans
+
+ integer i
+
+ include "select.i"
+
+ for (i=1; i <= TAPENO; i=i+1)
+    if (unit(i) > 0)
+        {
+        call close(unit(i))
+        call remove(file(1,i))
+        }
+
+ return
+ end
+#-t-  cleans                      194  local   12/24/80  14:43:55
+#-h-  compar                     1812  local   12/24/80  14:43:56
+ ## compar - compare lin(lp1) with lin(lp2)
+    integer function compar(lp1, lp2, lin)
+
+    character lin(ARB)
+    integer i, j, lp1, lp2
+    character type
+    character ct
+    character c1,c2
+    character clower
+    include "csort.i"
+
+    i = lp1
+    j = lp2
+
+  if (blanks == YES)      # ignore leading blanks
+       {
+       while (lin(i) == BLANK)  i = i + 1
+       while (lin(j) == BLANK)  j = j + 1
+       }
+ else if (subf == YES)
+    {
+    while (lin(i) != EOS) i = i + 1
+    while (lin(j) != EOS) j = j + 1
+    if (i > lp1 + cofset)
+        i = lp1 + cofset
+    if (j > lp2 + cofset)
+        j = lp2 + cofset
+    }
+
+  repeat
+     {
+     if (lin(i) == EOS)
+         {
+         compar = 0
+         return
+         }
+     if (noprt == YES)     #ignore non-printing characters
+         {
+         while ((lin(i) > 0 & lin(i) < 32) |
+                lin(i) == 127)  i = i + 1
+         while ((lin(j) > 0 & lin(j) < 32) |
+                lin(j) == 127)  j = j + 1
+         }
+     if (dict == YES)      #dictionary order--only letters & digits & blanks
+         {
+         repeat
+            {
+            ct = type (lin(i))
+            if (ct == LETTER | ct == DIGIT | ct== BLANK | ct == EOS)  break
+            i = i + 1
+            }
+         repeat
+            {
+            ct = type (lin(j))
+            if (ct == LETTER | ct == DIGIT | ct == BLANK | ct == EOS)  break
+            j = j + 1
+            }
+         }
+     if (fold == YES)
+          {
+          c1 = clower (lin(i))
+          c2 = clower(lin(j))
+          }
+      else
+          {
+          c1 = lin(i)
+          c2 = lin(j)
+          }
+
+       if (c1 != c2)  break
+       i = i + 1
+       j = j + 1
+       }
+    if (c1 < c2 )
+       compar = -1
+    else
+       compar = +1
+    if (revers == YES)
+        compar = -compar
+    return
+    end
+#-t-  compar                     1812  local   12/24/80  14:43:56
+#-h-  eor                         100  local   12/24/80  14:50:50
+ integer function eor(buffer)
+
+ character buffer(ARB)
+
+ if (buffer(1) == CTRLD & buffer(2) == NEWLINE)
+    eor = YES
+ else
+    eor = NO
+
+ return
+ end
+#-t-  eor                         100  local   12/24/80  14:50:50
+#-h-  exchan                      199  local   12/24/80  14:43:56
+ ## exchan - exchange linbuf(lp1) with linbuf(lp2)
+    subroutine exchan(lp1, lp2, linbuf)
+    character linbuf(ARB)
+    integer k, lp1, lp2
+
+    k = lp1
+    lp1 = lp2
+    lp2 = k
+    return
+    end
+#-t-  exchan                      199  local   12/24/80  14:43:56
+#-h-  fsetup                      468  local   12/24/80  14:43:56
+ subroutine fsetup
+
+ character temp(4)
+ integer i, n, itoc, open
+
+ include "select.i"
+
+ tape = 1
+ level = 1
+ for (i=1; i <= TAPENO; i=i+1)
+    {
+    a(i) = 1
+    d(i) = 1
+    temp(1) = LETS
+    n = itoc(i, temp(2), 3)
+    call mkuniq(temp, file(1,i))
+    if (i < TAPENO)
+        {
+        unit(i) = open(file(1,i), WRITE)
+        if (unit(i) == ERR)
+            call cant(file(1,i))
+        }
+    else
+        unit(i) = 0
+    }
+ d(TAPENO) = 0
+ a(TAPENO) = 0
+
+ return
+ end
+#-t-  fsetup                      468  local   12/24/80  14:43:56
+#-h-  fstack                      349  local   12/24/80  14:43:57
+   ## fstack - generate stack of input files
+
+   subroutine fstack (iarg)
+
+   integer i
+   character iarg(FILENAMESIZE)
+
+   include "flist.i"
+
+   if (flevel >= FLMAX)
+        call error ("too many arguments.")
+     flevel = flevel + 1
+     for (i=1; iarg(i) != EOS; i=i+1)
+         ffiles(i,flevel) = iarg(i)
+    ffiles(i,flevel) = EOS
+   return
+   end
+#-t-  fstack                      349  local   12/24/80  14:43:57
+#-h-  gsrtln                      869  local   12/24/80  14:43:57
+ integer function gsrtln(buf)
+
+ character buf(MAXLINE)
+ integer getlin, init, level, fopen, open, infile
+
+ include "flist.i"
+
+ data init/0/
+
+ if (init == 0)
+    {
+    level = 0
+    if (flevel == 0)
+        {
+        flevel = 1
+        call scopy('-', 1, ffiles(1,1), 1)
+        }
+    init = 1
+    fopen = NO
+    }
+ if (fopen == NO & level == flevel)
+    gsrtln = EOI
+ else
+    {
+    if (fopen == NO)
+        {
+        fopen = YES
+        level = level + 1
+        if (ffiles(1, level) == MINUS)
+            infile = STDIN
+        else
+            {
+            infile = open(ffiles(1, level), READ)
+            if (infile == ERR)
+                call cant(ffiles(1, level))
+            }
+        }
+    gsrtln = getlin(buf, infile)
+    if (gsrtln == EOF)
+        {
+        fopen = NO
+        if (infile != STDIN)
+            call close(infile)
+        }
+    }
+
+ return
+ end
+#-t-  gsrtln                      869  local   12/24/80  14:43:57
+#-h-  makrun                      544  local   12/24/80  14:43:57
+ integer function makrun(nlines)
+
+ integer nlines, lbp, len, gsrtln
+
+ include "csort.i"
+
+ nlines = 0
+ lbp = 1
+ repeat
+    {
+    len = gsrtln(linbuf(lbp))
+    if (len == EOI)
+        break
+    if (len == EOF & merg == YES)
+        break
+    if (len != EOF)
+        {
+        nlines = nlines + 1
+        linptr(nlines) = lbp
+        lbp = lbp + len + 1             # "1" is room for EOS
+        if (lbp >= MAXTEXT - MAXLINE | nlines >= MAXPTR)
+            break
+        }
+    }
+ if (len == EOI)
+    makrun = EOI
+ else
+    makrun = OK
+
+ return
+ end
+#-t-  makrun                      544  local   12/24/80  14:43:57
+#-h-  mrgrun                     1170  local   12/24/80  14:43:58
+ #      merges one run from unit(t(i)),...,unit(t(TAPENO-1)) onto
+ #      unit(t(TAPENO))
+ #      returns a value of 0 if all files terminate on EOR
+ #      returns index of file which terminated on EOF (1...TAPENO-1)
+
+ subroutine mrgrun(ieof)
+
+ integer outfil, lbp, nf, i, k, n, getlin, eor, ieof
+
+ include "select.i"
+ include "csort.i"
+
+ outfil = t(TAPENO)
+ lbp = 1
+ nf = 0
+ ieof = 0
+ for (i=1; i < TAPENO; i=i+1)
+    {
+    k = t(i)
+    n = getlin(linbuf(lbp), unit(k))
+    if (n != EOF & eor(linbuf(lbp)) != YES)
+        {
+        nf = nf + 1
+        linptr(nf) = lbp
+        }
+    else if (n == EOF)
+        ieof = i
+    lbp = lbp + MAXLINE
+    }
+
+ call quick(linptr, nf, linbuf)                 # now have initial heap
+
+ while (nf > 0)
+    {
+    lbp = linptr(1)
+    call putlin(linbuf(lbp), unit(outfil))      # write top line of heap
+    i = lbp / MAXLINE + 1                       # compute index of file
+    k = t(i)
+    n = getlin(linbuf(lbp), unit(k))
+    if (n == EOF | eor(linbuf(lbp)) == YES)
+        {
+        linptr(1) = linptr(nf)
+        nf = nf - 1
+        if (n == EOF)
+            ieof = i
+        }
+    call reheap(linptr, nf, linbuf)
+    }
+
+ return
+ end
+#-t-  mrgrun                     1170  local   12/24/80  14:43:58
+#-h-  puteor                      103  local   12/24/80  14:43:59
+ subroutine puteor(int)
+
+ integer int
+
+ call putch(CTRLD, int)
+ call putch(NEWLINE, int)
+
+ return
+ end
+#-t-  puteor                      103  local   12/24/80  14:43:59
+#-h-  putrun                      236  local   12/24/80  14:43:59
+ subroutine putrun(linptr, nlines, linbuf, outfil)
+
+ character linbuf(MAXTEXT)
+ integer i, j, linptr(MAXPTR), nlines, outfil
+
+ for (i=1; i <= nlines; i=i+1)
+    {
+    j = linptr(i)
+    call putlin(linbuf(j), outfil)
+    }
+
+ return
+ end
+#-t-  putrun                      236  local   12/24/80  14:43:59
+#-h-  quick                      1309  local   12/24/80  14:44:00
+ ## quick - quicksort for character lines
+    subroutine quick(linptr, nlines, linbuf)
+    character linbuf(ARB)
+    integer compar
+    integer i, j, linptr(ARB), lv(LOGPTR), nlines, p, pivlin, uv(LOGPTR)
+
+    lv(1) = 1
+    uv(1) = nlines
+    p = 1
+    while (p > 0)
+       if (lv(p) >= uv(p))      # only one element in this subset
+          p = p - 1      # pop stack
+       else {
+          i = lv(p) - 1
+          j = uv(p)
+          pivlin = linptr(j)   # pivot line
+          while (i < j) {
+             for (i=i+1; compar(linptr(i), pivlin, linbuf) < 0; i=i+1)
+                ;
+             for (j = j - 1; j > i; j = j - 1)
+                if (compar(linptr(j), pivlin, linbuf) <= 0)
+                   break
+             if (i < j)      # out of order pair
+                call exchan(linptr(i), linptr(j), linbuf)
+             }
+          j = uv(p)         # move pivot to position i
+          call exchan(linptr(i), linptr(j), linbuf)
+          if (i-lv(p) < uv(p)-i) {   # stack so shorter done first
+             lv(p+1) = lv(p)
+             uv(p+1) = i - 1
+             lv(p) = i + 1
+             }
+          else {
+             lv(p+1) = i + 1
+             uv(p+1) = uv(p)
+             uv(p) = i - 1
+             }
+          p = p + 1         # push onto stack
+          }
+    return
+    end
+#-t-  quick                      1309  local   12/24/80  14:44:00
+#-h-  redout                      222  local   12/24/80  14:44:00
+ # subroutine redout
+ #
+ # integer assign
+ #
+ # include "csort.i"
+ #
+ # if (ifout == YES)
+ #    if (assign(ofile, STDOUT, WRITE) == ERR)
+ #      call remark("Cannot redirect standard output to +o file.")
+ #
+ # return
+ # end
+#-t-  redout                      222  local   12/24/80  14:44:00
+#-h-  reheap                      562  local   12/24/80  14:44:01
+ ## reheap - propagate linbuf(linptr(1)) to proper place in heap
+    subroutine reheap(linptr, nf, linbuf)
+    character linbuf(MAXTEXT)
+    integer compar
+    integer i, j, nf, linptr(ARB)
+
+    for (i = 1; 2 * i <= nf; i = j) {
+       j = 2 * i
+       if (j < nf)      # find smaller child
+          if (compar(linptr(j), linptr(j+1), linbuf) > 0)
+             j = j + 1
+       if (compar(linptr(i), linptr(j), linbuf) <= 0)
+          break      # proper position found
+       call exchan(linptr(i), linptr(j), linbuf)   # percolate
+       }
+    return
+    end
+#-t-  reheap                      562  local   12/24/80  14:44:01
+#-h-  srtint                     1331  local   12/24/80  14:44:01
+ subroutine srtint
+
+ character temp(FILENAMESIZE), clower
+ integer i, n, getarg, index, ctoi
+ external index
+
+ include "select.i"
+ include "csort.i"
+ include "flist.i"
+
+ flevel = 0
+ blanks = NO
+ dict = NO
+ fold = NO
+ noprt = NO
+ merg = NO
+ revers = NO
+ subf = NO
+ cofset = 0
+ # ifout = NO
+ call query ("usage:  sort [-bdfimr] [+sn] [files].")
+ for (i=1; getarg(i, temp, FILENAMESIZE) != EOF; i=i+1)
+    {
+    if (temp(1) == MINUS & temp(2) != EOS)
+        {
+        if (index(temp, LETB) != 0 | index(temp, BIGB) != 0)
+            blanks = YES
+        if (index(temp, LETD) != 0 | index(temp, BIGD) != 0)
+            dict = YES
+        if (index(temp, LETF) != 0 | index(temp, BIGF) != 0)
+            fold = YES
+        if (index(temp, LETI) != 0 | index(temp, BIGI) != 0)
+            noprt = YES
+        if (index(temp, LETM) != 0 | index(temp, BIGM) != 0)
+            merg = YES
+        if (index(temp, LETR) != 0 | index(temp, BIGR) != 0)
+            revers = YES
+        }
+   else if (temp(1) == PLUS & clower(temp(2)) == LETS)
+        {
+        subf = YES
+        n = 3
+        cofset = ctoi(temp, n) - 1
+        if (cofset < 0)
+            cofset = 0
+        }
+ #    else if (temp(1) == PLUS & clower(temp(2)) == LETO)
+ #      {
+ #      ifout = YES
+ #      call scopy(temp, 3, ofile, 1)
+ #      }
+    else
+        call fstack(temp)
+    }
+ return
+ end
+#-t-  srtint                     1331  local   12/24/80  14:44:01
+#-h-  stape                       418  local   12/24/80  14:44:01
+ subroutine stape
+
+ integer i, z
+
+ include "select.i"
+
+ if (d(tape) < d(tape+1))
+    tape = tape + 1
+ else
+    {
+    if (d(tape) == 0)           # bump one Fibonacci level
+        {
+        level = level + 1
+        z = a(1)
+        for (i=1; i < TAPENO; i=i+1)
+            {
+            d(i) = z + a(i+1) - a(i)
+            a(i) = z + a(i+1)
+            }
+        }
+    tape = 1
+    }
+ d(tape) = d(tape) - 1
+ return
+ end
+#-t-  stape                       418  local   12/24/80  14:44:01
+#-h-  sum                         132  local   12/24/80  14:44:02
+ integer function sum(array, n)
+
+ integer array(ARB), n, i
+
+ sum = 0
+ for (i=1; i<=n; i=i+1)
+    sum = sum + array(i)
+
+ return
+ end
+#-t-  sum                         132  local   12/24/80  14:44:02
+#-t-  sort.r                    15476  local   12/24/80  14:56:02

@@ -1,0 +1,40 @@
+# sieve - Eratosthenes sieve
+# if bit is clear number is prime
+
+define(LIMIT,1000000)
+define(WORDSIZE,32)
+
+parameter (LEN=LIMIT/WORDSIZE+1)
+integer j,k
+integer bits(LEN)
+data bits/LEN*0/
+
+for(k=2; k<LIMIT/2; k=k+1){
+	for( ; btest(bits,k); k=k+1)
+		;
+	for(j=k+k; j<=LIMIT; j=j+k)
+		call bset(bits,j)
+	}
+for(j=1; j<=LIMIT; j=j+1)
+	if(!btest(bits,j))
+		call outint(j)
+call outint(0)
+stop
+end
+
+# outint - output integer
+
+subroutine outint(i)
+integer i,j,n,row(10)
+data n/0/
+
+n=n+1
+if(i==0 | n>10){
+	write(5,9050)(row(j),j=1,n-1)
+	9050 format(10i6)
+	n=1
+	}
+if(i>0)
+	row(n)=i
+return
+end

@@ -1,0 +1,55 @@
+.bp 1
+.in 0
+.he 'WC (1)'2/15/79'WC (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+wc - count lines, words, and characters in files
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+wc [-lwc] files...
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Wc prints the number of lines, words, and characters in the named
+files.
+The filename "-" specifies the standard input.
+A total is also printed.  A "word" is any sequence of characters
+delimited by white space.
+.sp
+The options -l, -w, and -c specify, respectively, that only the line,
+word, or character count be printed.  For example,
+.sp
+.in +3
+.nf
+wc -lc foo
+.in -3
+.sp
+.fi
+prints the number of lines and characters in "foo".
+.sp
+If no files are given, wc reads its standard input and the total
+count is suppressed.
+.fi
+.sp
+.ne 2
+.ti -3
+DIAGNOSTICS
+.br
+name: can't open
+.in +5
+Printed when an input file can't be opened; processing ceases
+.in -5
+.sp
+.ti -3
+AUTHORS
+.br
+David Hanson and friends (U. of Arizona)

@@ -1,0 +1,541 @@
+#-h-  dc.r                      16386  local   12/22/80  14:37:00
+#-h-  dc                         1644  local   12/19/80  15:43:27
+ ## dc - desk calculator
+ # include ratdef
+ define(MAXTOK,MAXLINE)
+ define(OP,1)
+ define(OPND,2)
+ define(SEP,3)
+ define(OPDONE,1)
+ define(OPGO,2)
+ define(OPLP,3)
+ define(OPRP,4)
+ define(OPOR,5)
+ define(OPAND,6)
+ define(OPNOT,7)
+ define(OPEQ,8)
+ define(OPNE,9)
+ define(OPGT,10)
+ define(OPGE,11)
+ define(OPLT,12)
+ define(OPLE,13)
+ define(OPADD,14)
+ define(OPSUB,15)
+ define(OPMUL,16)
+ define(OPDIV,17)
+ define(OPNEG,18)
+ define(OPMOD,19)
+ define(OPEXP,20)
+ define(OPPLUS,21)
+ define(MAXOP,21)
+ define(OPERR,-1)
+ define(MAXSTACK,200)  # evaluation stack
+ define(MEMSIZE,4000)
+
+ DRIVER(dc)
+ character name(FILENAMESIZE)
+ integer getarg, open
+ integer fd, i
+
+ include "ctab.i"
+
+ call query ("usage:  dc.")
+ call dsinit (MEMSIZE)
+ idtab = mktabl (1)
+ fd = ERR
+ for (i=1; getarg(i, name, FILENAMESIZE) != EOF; i=i+1)
+        {
+        if (name(1) == MINUS & name(2) == EOS)
+                fd = STDIN
+        else if (name(1) != MINUS)
+                {
+                fd = open(name, READ)
+                if (fd == ERR)
+                        call cant(name)
+                }
+        if (fd != ERR)
+                {
+                call dcexp (fd)
+                if (fd != STDIN)
+                        call close (fd)
+                }
+        }
+
+ if (fd == ERR)
+        call dcexp (STDIN)
+ DRETURN
+ end
+#-t-  dc                         1644  local   12/19/80  15:43:27
+#-h-  binop                      1413  local   12/19/80  15:43:27
+ ## binop - evaluates top 3 items on eval stack
+ subroutine binop
+
+ integer l, r, result, op
+ include "cexp.i"
+
+ r = tokst(top)
+ op = tokst(top-1)
+ l = tokst(top-2)
+ top = top - 2
+ switch (op)
+        {
+        case OPOR: if (l != 0 | r != 0) result = 1
+                   else result = 0
+        case OPAND:if (l != 0 & r != 0) result = 1
+                   else result = 0
+        case OPNOT: if (r == 0) result = 1
+                    else result = 0
+        case OPEQ:  if (l == r) result = 1
+                    else result = 0
+        case OPNE:  if (l != r) result = 1
+                    else result = 0
+        case OPGT:  if (l > r) result = 1
+                    else result = 0
+        case OPGE:  if (l >= r) result = 1
+                    else result = 0
+        case OPLT:  if (l < r) result = 1
+                    else result = 0
+        case OPLE:  if (l <= r) result = 1
+                    else result = 0
+        case OPADD: result = l + r
+        case OPSUB:  result = l - r
+        case OPNEG:  result = (-r)
+        case OPMUL:  result = l * r
+        case OPDIV:  result = l / r
+        case OPMOD:  result = mod(l,r)
+        case OPEXP:  result = l**r
+        case OPPLUS: result = (+r)
+        }
+ tokst(top) = result
+ return
+ end
+#-t-  binop                      1413  local   12/19/80  15:43:27
+#-h-  ctonum                      993  local   12/19/80  15:43:28
+# ctonum - string to number with radix control
+ integer function ctonum(buf,i,dradix)
+ character buf(ARB), tmp(MAXLINE)
+ integer ctoi
+ external index
+ integer i, j, c, n, val, radix, dradix, m
+ string digits "0123456789abcdefABCDEF"
+
+ if (buf(i) == MINUS)
+        {
+        i = i + 1
+        m = -1
+        }
+ else m = 1
+ for (n=0;;i=i+1)
+        {       #collect digits
+        c = index(digits,buf(i))
+        if (c==0) break
+        if (c > 16) c = c-6     # convert to lower case
+        n = n+1
+        tmp(n) = c-1            # save digit value
+        }
+ if (buf(i) == UNDERLINE)
+        {       # get new radix, default radix is 10.
+        radix = 0
+        i = i+1
+        radix = ctoi(buf,i)
+        }
+ else radix = dradix
+ val = 0
+ for (j=1; j<=n; j = j+1)
+        {
+        c = tmp(j)
+        if (c >= radix)
+                call remark("number error")
+        val = val * radix + c
+        }
+ return ( m*val )
+ end
+#-t-  ctonum                      993  local   12/19/80  15:43:28
+#-h-  dcexp                      2776  local   12/19/80  15:43:29
+ ## dcexp - read file and process desk calculator expressions
+ subroutine dcexp (fd)
+
+ integer fd, junk, i, answer, save
+ integer getlin, numtoc, exptoi, index, strcmp
+ external index
+ integer ibase, obase, ubase, radexp, eqloc
+ character line(MAXLINE), name(MAXTOK)
+ include "ctab.i"
+ string errmsg ":  invalid expression"
+ string ibname "ibase"
+ string obname "obase"
+
+ ibase = 10
+ obase = 10
+ call enter (ibname, ibase, idtab)
+ call enter (obname, obase, idtab)
+ while(getlin(line, fd) != EOF)
+        {
+        radexp = 0              # assume not radix expression
+        call strip(line)        #remove blanks, tabs, NEWLINEs
+        i = 1
+        save = index(line, EQUALS)      #see if result should be stored
+        if (save != 0)
+                {
+                if (line(save+1) == EQUALS)     #oops, found relational
+                        save = 0
+                else
+                        {
+                        eqloc = save
+                        i = save + 1
+                        line(eqloc) = EOS
+                        call scopy(line, 1, name, 1)
+                        if (strcmp(name,ibname) == 0 |
+                            strcmp(name,obname) == 0)
+                                radexp = 1
+                        }
+                }
+        else
+                {
+                if (strcmp(line,ibname) == 0 |
+                    strcmp(line,obname) == 0)
+                        radexp = 1
+                }
+        ubase = ibase
+        if (radexp == 1)
+                ubase = 10
+        answer = exptoi(line, i, ubase)
+        if (line(i) != EOS)             #error
+                {
+                if (save != 0) line(eqloc) = EQUALS
+                call putlin(line, ERROUT)
+                call putlin(errmsg, ERROUT)
+                call putch(NEWLINE, ERROUT)
+                }
+        else
+                {
+                ubase = obase
+                if (radexp == 1 | save != 0)
+                        ubase = 10
+                junk = numtoc(answer, line, MAXLINE, ubase)
+                if (save != 0)          #store answer
+                        {
+                        call enter (name, answer, idtab)
+                        if (strcmp(ibname,name) == 0)
+                                ibase = answer
+                        if (strcmp(obname,name) == 0)
+                                obase = answer
+                        }
+                else
+                        {
+                        call putlin(line, STDOUT)
+                        call putch(NEWLINE, STDOUT)
+                        }
+                }
+        }
+ return
+ end
+#-t-  dcexp                      2776  local   12/19/80  15:43:29
+#-h-  exptoi                     4016  local   12/19/80  15:43:30
+ ## exptoi - evalutate arithmetic expression
+ integer function exptoi (exp, ptr, radix)
+
+ integer exptok, stackx
+ character exp(ARB)
+ integer ptr, radix
+ integer k, tok, kind, preced(MAXOP)
+ include "cexp.i"
+
+ # precedence of respective operators
+ data preced(1), preced(2), preced(3), preced(4), preced(5),
+      preced(6), preced(7), preced(8), preced(9), preced(10),
+      preced(11), preced(12), preced(13), preced(14), preced(15),
+      preced(16), preced(17), preced(18),
+      preced(19), preced(20), preced(21) / 0,  0,   # EOS, start_expr
+        1,  1,          # (  )
+        2,  2,          # |  &
+        3,              # ! (or ^ or ~)
+        4,4,4,4,4,4,    # == != > >= < <=
+        5,  5,          # +  -
+        6,  6,          # *  /
+        8,  6,  7, 8      /# neg, mod, expon, plus
+
+
+ k = ptr
+ top = 1
+ tokst(top) = OPGO
+ kindst(top) = SEP
+
+ while (exptok(exp, k, tok, kind, radix) == YES) #loop thru legal toks
+        {
+        if (kind == OPND)
+                {
+                if (kindst(top) == OPND)
+                        return(0)
+                }
+        else if (kind == OP)
+                {
+                if (kindst(top) == OP)
+                        return(0)
+                else if (kindst(top) == SEP)
+                        {       #check for unary +,- or !
+                        if (tok != OPADD & tok != OPSUB & tok != OPNOT)
+                                return(0)
+                        if (stackx(0, OPND) == ERR)
+                                return(0)
+                        if (tok == OPADD)
+                                tok = OPPLUS
+                        else if (tok == OPSUB)
+                                tok = OPNEG
+                        }
+                else    #kindst(top) == OPND
+                        {
+                        if (kindst(top-1) == OP)
+                                {
+                                while(preced(tokst(top-1)) >= preced(tok))
+                                        call binop
+                                }
+                        }
+                }
+        else # (kind == SEP)
+                {
+                if (tok != OPLP)        #if tok == ( or tok == EOS
+                        {
+                        if (kindst(top) != OPND)
+                                return(0)
+                        while(preced(tokst(top-1)) > preced(tok))
+                                {
+                                if (kindst(top-1) == OP)
+                                        call binop
+                                else
+                                        return(0)  # no right paren
+                                }
+                        if (preced(tokst(top-1)) == preced(tok))
+                                {
+                                if (tok == OPDONE)
+                                        {
+                                        ptr = k    #normal return
+                                        return(tokst(top))
+                                        }
+                                else    #remove matching LPAREN
+                                        {
+                                        tok = tokst(top)
+                                        kind = kindst(top)
+                                        top = top -2
+                                        }
+                                }
+                        else    #unbalanced parens
+                                return(0)
+                        }
+                }
+        # stack new tok, kind
+        if (stackx(tok, kind) == ERR)
+                return(0)
+        }
+ return(0)
+ end
+#-t-  exptoi                     4016  local   12/19/80  15:43:30
+#-h-  exptok                     3810  local   12/19/80  15:43:31
+ ## exptok - get expression token for evaluation
+ integer function exptok(exp, k, tok, kind, radix)
+ character exp(ARB), defn(MAXTOK), name(MAXTOK)
+ integer k      #index, updated unless EOS
+ integer tok    #return value, token found
+ integer kind   #return value, kind of token
+ integer radix  #default radix for numbers
+ integer ctonum, lookup
+ character type
+ character c, cn
+ integer index
+ external index
+ include "ctab.i"
+ string digits "0123456789abcdefABCDEF"
+ include "cexp.i"
+
+ c = type(exp(k))
+ if (radix > 10)
+        {
+        if (index(digits,exp(k)) > 0) c = DIGIT
+        }
+ if (c == DIGIT)
+        {
+        tok = ctonum(exp, k, radix)
+        kind = OPND
+        return(YES)
+        }
+ else if (c == LETTER)
+        {               #found stored variable name
+        call movnam(exp, k, name, 1)
+        k = k + length(name)
+        if (lookup (name, tok, idtab) == YES)
+                {
+                kind = OPND
+                return(YES)
+                }
+        else
+                return(NO)
+        }
+ else           #c is symbol
+        {
+        cn = exp(k+1)
+        kind = OP
+        switch(c)
+                {
+                case TILDE:  if (cn == EQUALS)
+                                {
+                                tok = OPNE
+                                k = k + 1
+                                }
+                         else tok = OPNOT
+                case CARET:  if (cn == EQUALS)
+                                {
+                                tok = OPNE
+                                k = k + 1
+                                }
+                         else tok = OPNOT
+                case BANG:  if (cn == EQUALS)
+                                {
+                                tok = OPNE
+                                k = k + 1
+                                }
+                         else tok = OPNOT
+                case LESS:  if (cn == EQUALS)
+                                {
+                                tok = OPLE
+                                k = k + 1
+                                }
+                         else tok = OPLT
+                case GREATER:  if (cn == EQUALS)
+                                {
+                                tok = OPGE
+                                k = k + 1
+                                }
+                         else tok = OPGT
+                case EQUALS:  if (cn == EQUALS)
+                                {
+                                tok = OPEQ
+                                k = k + 1
+                                }
+                         else tok = OPERR
+                case BAR:  tok = OPOR
+                case AMPER: tok  = OPAND
+                case PLUS:  tok = OPADD
+                case MINUS: tok = OPSUB
+                case STAR:  if (cn == STAR)
+                                {
+                                tok = OPEXP
+                                k = k + 1
+                                }
+                            else tok = OPMUL
+                case SLASH: tok = OPDIV
+                case PERCENT: tok = OPMOD
+                case LPAREN: {
+                             kind = SEP
+                             tok = OPLP
+                             }
+                case RPAREN: {
+                             kind = SEP
+                             tok = OPRP
+                             }
+                case EOS:    {
+                             kind = SEP
+                             tok = OPDONE
+                             }
+                default:     tok = OPERR
+                }
+
+ if (tok == OPERR)
+        return(NO)
+ if (tok != OPDONE)
+        k = k + 1
+ return(YES)
+ }
+ end
+#-t-  exptok                     3810  local   12/19/80  15:43:31
+#-h-  movnam                      451  local   12/19/80  15:43:32
+ ## movnam - move in(i) to out(j) until non-alphanumeric found
+ subroutine movnam (in, i, out, j)
+ character in(ARB), out(ARB)
+ integer i, j, k1, k2
+ character type
+ character c
+
+ k1 = i
+ k2 = j
+ for(c=type(in(k1)); c == LETTER | c == DIGIT; c=type(in(k1)))
+        {
+        out(k2) = in(k1)
+        k1 = k1 + 1
+        k2 = k2 + 1
+        }
+ out(k2) = EOS
+ return
+ end
+#-t-  movnam                      451  local   12/19/80  15:43:32
+#-h-  numtoc                      817  local   12/19/80  15:43:33
+ ## numtoc - convert integer int to char string in str
+ integer function numtoc(int, str, size, radix)
+ integer mod
+ integer radix
+ integer d, i, int, intval, j, k, size
+ character str(ARB)
+ string digits "0123456789ABCDEF"
+
+ intval = abs(int)
+ str(1) = EOS
+ i = 1
+ repeat
+        {       # generate digits
+        i = i+1
+        d = mod(intval,radix)
+        str(i) = digits(d+1)
+        intval = intval / radix
+        } until (intval == 0 | i >= size)
+ if (int < 0 & i < size)
+        {       # then sign
+        i = i+1
+        str(i) = MINUS
+        }
+ numtoc = i - 1
+ for (j = 1; j < i; j = j+1)
+        {       # reverse digits
+        k = str(i)
+        str(i) = str(j)
+        str(j) = k
+        i = i-1
+        }
+ return
+ end
+#-t-  numtoc                      817  local   12/19/80  15:43:33
+#-h-  stackx                      480  local   12/19/80  15:43:33
+ ## stackx - put next expression on arith evaluation stack
+ integer function stackx(tok, kind)
+ integer tok, kind
+
+ include "cexp.i"
+
+ if (top >= MAXSTACK)
+        {
+        call remark ("arith evaluation stack overflow.")
+        return (ERR)
+        }
+ top = top + 1
+ tokst(top) = tok
+ kindst(top) = kind
+ return(YES)
+ end
+#-t-  stackx                      480  local   12/19/80  15:43:33
+#-h-  strip                       572  local   12/19/80  15:43:33
+ ## strip - string blanks, tabs, and NEWLINES from line
+
+ subroutine strip (line)
+
+ character line(ARB)
+ integer i
+
+ for (i=1; line(i) != EOS; )
+        {
+        if (line(i) == BLANK | line(i) == TAB | line(i) == NEWLINE)
+                call scopy(line, i+1, line, i)
+        else
+                i = i + 1
+        }
+ return
+ end
+#-t-  strip                       572  local   12/19/80  15:43:33
+#-t-  dc.r                      16386  local   12/22/80  14:37:00

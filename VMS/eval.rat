@@ -1,0 +1,367 @@
+define(DIGITS,257)
+define(LPAREN,40)
+define(RPAREN,41)
+define(BAR,124)
+define(AMPER,38)
+define(EXCLAIM,33)
+define(GREATER,62)
+define(GE,264)
+define(LESS,60)
+define(LE,266)
+define(NE,267)
+define(EQUALS,61)
+define(PLUS,43)
+define(MINUS,45)
+define(STAR,42)
+define(SLASH,47)
+define(PERCENT,37)
+define(CARET,94)
+define(UMINUS,275)
+define(yyerrok,yyerrf = 0)
+define(yyclearin,yychar = -1)
+
+subroutine yyactr(yyprdn)
+common/yycomn/yylval,yyval,yypv,yyvalv(150)
+common/yylcom/yychar,yyerrf,yydebu
+integer yychar, yyerrf, yydebu
+integer yyprdn,yyval,yylval,yypv,yyvalv
+integer mod
+integer i
+character line
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+goto 1000
+
+1 { exval = yyvalv(yypv+1) } return
+2 { exval = 0 } return
+3 { yyval=0; if(yyvalv(yypv+1) != 0 | yyvalv(yypv+3) != 0)yyval=1 } return
+4 { yyval=0; if(yyvalv(yypv+1) != 0 & yyvalv(yypv+3) != 0)yyval=1 } return
+5 { yyval=0; if(yyvalv(yypv+2) == 0)yyval=1 } return
+6 { yyval=0; if(yyvalv(yypv+1) == yyvalv(yypv+3))yyval=1 } return
+7 { yyval=0; if(yyvalv(yypv+1) != yyvalv(yypv+3))yyval=1 } return
+8 { yyval=0; if(yyvalv(yypv+1) > yyvalv(yypv+3))yyval=1 } return
+9 { yyval=0; if(yyvalv(yypv+1) >= yyvalv(yypv+3))yyval=1 } return
+10 { yyval=0; if(yyvalv(yypv+1) < yyvalv(yypv+3))yyval=1 } return
+11 { yyval=0; if(yyvalv(yypv+1) <= yyvalv(yypv+3))yyval=1 } return
+12 { yyval = (yyvalv(yypv+1)+yyvalv(yypv+3)) } return
+13 { yyval = (yyvalv(yypv+1)-yyvalv(yypv+3)) } return
+14 { yyval = (yyvalv(yypv+1)*yyvalv(yypv+3)) } return
+15 { yyval = (yyvalv(yypv+1)/yyvalv(yypv+3)) } return
+16 { yyval = mod(yyvalv(yypv+1),yyvalv(yypv+3)) } return
+17 { yyval = (yyvalv(yypv+2)) } return
+18 { yyval=1; for(i=1; i <= yyvalv(yypv+3); i=i+1)yyval=yyval*yyvalv(yypv+1) } return
+19 { yyval = -yyvalv(yypv+2) } return
+20 { yyval = yyvalv(yypv+2) } return
+21 { yyval = exval } return
+1000 goto(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,999),yyprdn
+999 return
+end
+
+define(YYERRCODE,256)
+
+integer function yylex
+character c
+character line
+integer peek
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+while(line(lpos) == BLANK | line(lpos) == TAB | line(lpos) == NEWLINE)
+	lpos=lpos+1
+c=line(lpos)
+lpos=lpos+1
+if(c == NULL | c == PLUS | c == MINUS | c == STAR | c == SLASH | c == PERCENT
+	| c == CARET | c == LPAREN | c == RPAREN)
+	return(c)
+if(c == GREATER)
+	return(peek(EQUALS, GE, GREATER))
+if(c == LESS)
+	return(peek(EQUALS, LE, LESS))
+if(c == EQUALS)
+	return(peek(EQUALS, EQUALS, EQUALS))
+if(c == BAR)
+	return(peek(BAR, BAR, BAR))
+if(c == AMPER)
+	return(peek(AMPER, AMPER, AMPER))
+if(c == EXCLAIM)
+	return(peek(EQUALS, NE, EXCLAIM))
+lpos=lpos-1
+exval = 0
+while(line(lpos) >= DIG0 & line(lpos) <= DIG9){
+	exval=exval*10+line(lpos)-DIG0
+	lpos=lpos+1
+	}
+return(DIGITS)
+end
+
+integer function peek(c, r1, r2)
+integer c, r1, r2
+character line
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+if(line(lpos) != c)
+	return(r2)
+lpos=lpos+1
+return(r1)
+end
+
+integer function yyerro
+return
+end
+
+integer function yyexcp(s, c)
+integer s, c
+if(s == 1){
+if(c == 0) yyexcp= -1
+else yyexcp = 0
+return
+}
+if(s == 28){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 6
+return
+}
+if(s == 29){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 7
+return
+}
+if(s == 30){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 8
+return
+}
+if(s == 31){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 9
+return
+}
+if(s == 32){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 10
+return
+}
+if(s == 33){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 11
+return
+}
+return
+end
+
+integer function yypars(yyargu)
+
+define(YYLAST,279)
+
+common /yycomn/ yylval, yyval, yypv, yyvalv(150)
+common /yylcom/ yychar, yyerrf, yydebu
+integer yyval, yypv, yylval, yychar, yydebu, yynerr, yystat, yyargu
+integer yylex, yyexcp, yys(150), yyerrf, yyvalv, yyn, yyj
+integer yyact(279)
+integer yypact(41)
+integer yypgo(3)
+integer yyr1(23)
+integer yyr2(23)
+integer yychk(41)
+integer yydef(41)
+
+data yyact/20,   9,  21,   1,  40,  18,  16,   0,  17,   0,
+  19,  20,   9,   0,   0,   0,  18,  16,   0,  17,
+   0,  19,  20,  14,  10,  12,   0,  18,  16,   0,
+  17,   0,  19,   0,  14,  10,  12,  20,   9,   3,
+   0,   0,  18,  16,   0,  17,   4,  19,  20,   6,
+   0,   5,   0,  18,  16,   0,  17,  21,  19,  20,
+  14,  10,  12,   0,  18,   0,   0,   0,  21,  19,
+   0,  14,  10,  12,   0,   0,   0,   0,   0,  21,
+   0,   0,   0,   0,   0,   0,   0,   8,   0,   0,
+   0,   0,   0,   0,  21,   0,   0,   0,   8,   0,
+   0,   0,   0,   0,   0,  21,   0,   0,   2,   0,
+   0,   0,  22,  23,  24,  25,  21,  26,  27,  28,
+  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,
+  39,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,  13,   0,  15,
+  11,   0,   0,   0,   0,   0,   0,   0,  13,   0,
+  15,  11,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   7,  13,   0,  15,  11,   0,   0,
+   0,   0,   0,   0,   0,  13,   0,  15,  11/
+
+data yypact/6,-2000, -26,   6,   6,   6,   6,-1000,   6,   6,
+   6,   6,   6,   6,   6,   6,   6,   6,   6,   6,
+   6,   6,  11, -37,-1000,-1000,   0,  11, -15, -15,
+ -15, -15, -15, -15,  22,  22, -92, -92, -92, -92,
+-1000/
+
+data yypgo/0,   3, 108/
+
+data yyr1/0,   1,   1,   2,   2,   2,   2,   2,   2,   2,
+   2,   2,   2,   2,   2,   2,   2,   2,   2,   2,
+   2,   2,  -1/
+
+data yyr2/0,   1,   0,   3,   3,   2,   3,   3,   3,   3,
+   3,   3,   3,   3,   3,   3,   3,   3,   3,   2,
+   2,   1,  -1/
+
+data yychk/0,  -1,  -2,  33,  40,  45,  43, 257, 124,  38,
+  61, 267,  62, 264,  60, 266,  43,  45,  42,  47,
+  37,  94,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,
+  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,
+  41/
+
+data yydef/2,  -2,   1,   0,   0,   0,   0,  21,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   5,   0,  19,  20,   3,   4,  -2,  -2,
+  -2,  -2,  -2,  -2,  12,  13,  14,  15,  16,  18,
+  17/
+
+yydebu = yyargu
+yystat = 0
+yychar = -1
+yynerr = 0
+yyerrf = 0
+yypv = 0
+
+100
+if(yydebu != 0){
+	write(6, 101) yystat, yyval, yychar, yypv
+	101 format("state ", i5, "  value ", i6, "  char ", i6, "  level ", i3)
+	}
+yypv = yypv + 1
+yys(yypv) = yystat
+yyvalv(yypv) = yyval
+
+200
+yyn = yypact(yystat+1)
+if(yyn <= (-1000)){
+	if(yyn == (-2000)){
+		if(yychar < 0) yychar = yylex(yylval)
+		}
+	goto 500
+	}
+if(yychar < 0) yychar = yylex(yylval)
+if(yydebu > 1){
+	write(6, 201) yyn, yychar
+	201 format("n = ", i6, "  char = ", i5)
+	}
+yyn = yyn + yychar
+if(yyn < 0 | yyn >= YYLAST) goto 500
+yyn = yyact(yyn+1)
+if(yychk(yyn+1) == yychar){
+	yychar = -1
+	yyval = yylval
+	yystat = yyn
+	if(yyerrf > 0) yyerrf = yyerrf - 1
+	goto 100
+	}
+
+500
+if(yydebu > 1){
+	write(6, 501) yyn
+	501 format("default is ", i5)
+	}
+yyn = yydef(yystat+1)
+if(yyn == (-2)) yyn = yyexcp(yystat, yychar)
+if(yyn == (-1)){
+	yypars = 0
+	return
+	}
+if(yyn == 0){
+	if(yyerrf == 3){
+		if(yydebu != 0){
+			write(6, 601) yychar
+			601 format("error recovery discards char ", i5)
+			}
+		if(yychar == (-1)){
+			yypars = 1
+			return
+			}
+		yychar = -1
+		goto 200
+		}
+	if(yyerrf == 0){	# new error
+		write(6, 701) 
+		701 format("syntax error")
+		yynerr = yynerr + 1
+		}
+	yyerrf = 3
+	# find a state where error is a legal shift
+	while(yypv >= 1){
+		yyn = yys(yypv)
+		yyn = yypact(yyn+1) + YYERRCODE
+		if(yyn >= 0 & yyn < YYLAST){
+			yyn = yyact(yyn+1)
+			if(yychk(yyn+1) == YYERRCODE){
+				yystat = yyn
+				goto 100
+				}
+			}
+		if(yydebu != 0){
+			write (6, 702) yys(yypv), yys(yypv-1)
+			702 format("error recovery pops ", i4, " uncovers ", i4)
+			}
+		yypv = yypv - 1
+		}
+	yypars = 1
+	return
+	}
+if(yydebu != 0){
+	write (6, 801) yyn
+	801 format("reduce ", i5)
+	}
+yypv = yypv - yyr2(yyn+1)
+yyval = yyvalv(yypv+1)
+if(yydebu > 2){
+	write(6, 802) yys(yypv), yypv, yyval
+	802 format("reduce uncovers ", i4, " level ", i3, " val ", i6)
+	}
+call yyactr(yyn)
+yyn = yyr1(yyn+1)
+yyj = yypgo(yyn+1) + yys(yypv) +2
+if(yyj > YYLAST) goto 899
+yystat = yyact(yyj)
+if(yychk(yystat+1) != (-yyn)){
+	899 yyn = yypgo(yyn+1)
+	yystat = yyact(yyn+1)
+	}
+goto 100
+end

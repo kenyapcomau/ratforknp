@@ -1,0 +1,682 @@
+#-h-  sedit.r                   19300  local   12/24/80  14:07:08
+#-h-  sedit                      4141  local   12/24/80  14:06:02
+# sedit - stream editor
+
+ # include ratdef
+
+define(NLINES,0)        # number of line numbers
+define(NEXT,1)          # index of next command
+define(LINE1,2)         # line number 1 or index of pattern
+define(LINE2,3)         # line number 2 or index of pattern
+define(COMMAND,4)       # command
+define(LIST,5)          # next command on insert/append list
+define(TEXT,6)          # text for insert/append or file name for read or file
+define(APPENDCOM,LETA)  # append command
+define(CHANGECOM,LETC)  # change command
+define(DELETECOM,LETD)  # delete command
+define(FILECOM,LETF)    # file (of script) commands
+define(INSERTCOM,LETI)  # insert command
+define(PRINTCOM,LETP)   # print command
+define(READCOM,LETR)    # read command
+define(SUBSTCOM,LETS)   # substitute command
+  define(SUBSTGFLAG,COMMAND+1) # YES for global replacement
+  define(SUBSTPFLAG,COMMAND+2) # YES for print
+  define(SUBSTPAT,COMMAND+3)   # index of pattern
+  define(SUBSTNEW,COMMAND+4)   # index of replacement
+define(WRITECOM,LETW)   # write command
+  define(WRITEFD,COMMAND+1)    # file descriptor for opened file or 0
+define(EQUALCOM,EQUALS) # print line number command
+
+define(INSERTLIST,1)    # location of list of inserts
+  define(APPENDLIST,LIST+1)    # location of list of appends
+define(COMMANDLIST,1)   # location of command list
+  define(FIRSTFREE,APPENDLIST+TEXT)    # first free location in buf
+
+define(MAXCMD,1000)     # size of command buffer
+define(MAXBUF,5000)     # size of text buffer
+define(LASTLINE,DOLLAR)
+define(GLOBAL,LETG)     # for getrhs
+define(PRINT,LETP)      # for ckp
+
+
+DRIVER(sedit)
+   character arg(MAXLINE), linbuf(MAXLINE)
+   integer i, j, nfiles, fd
+   integer length, getarg, open, getlin
+   include "csedit.i"
+
+   character clower
+
+   call query ( _
+     "usage: sedit [-n] [[-e script | -f sfiles] | script] [files].")
+   prevc = COMMANDLIST  # initialize lists
+   cmdbuf(COMMANDLIST+NEXT) = 0
+   lastcm = FIRSTFREE
+   lastbf = 1
+   nflag = NO
+   nfiles = 0
+   i = 1
+   if (getarg (i, arg, MAXLINE) == EOF)
+      call usage
+   if (arg(1) == MINUS & clower(arg(2)) == LETN) {
+      nflag = YES
+      i = i + 1
+      }
+   for (; getarg(i, arg, MAXLINE) ^= EOF; i = i + 2)
+      if (arg(1) == MINUS & clower(arg(2)) == LETF) {           # -f filename
+         if (getarg(i + 1, arg, MAXLINE) == EOF)
+            call usage
+         fd = open(arg, READ)
+         if (fd == ERR)
+            call cant(arg)
+         while (getlin(arg, fd) ^= EOF)
+            call compil(arg, fd)
+         call close(fd)
+         }
+      else if (arg(1) == MINUS & clower(arg(2)) == LETE) {      # -e script
+         if (getarg(i + 1, arg, MAXLINE) == EOF)
+             call usage
+         j = length(arg)
+         arg(j+1) = NEWLINE
+         arg(j+2) = EOS
+         call compil(arg, NO)
+         }
+      else      # no flags
+         break
+   if (lastcm == FIRSTFREE) {   # use argument as script
+      if (getarg(i, arg, MAXLINE) == EOF)
+          call usage
+      j = length(arg)
+      arg(j+1) = NEWLINE
+      arg(j+2) = EOS
+      call compil(arg, NO)
+      i = i + 1
+      }
+   linbuf(1) = EOS
+   lineno = 0
+   call docmds(linbuf, 0)       # do line 0 commands
+   for (; getarg(i, arg, MAXLINE) ^= EOF; i = i + 1) {
+      if (arg(1) == MINUS & arg(2) == EOS)
+         fd = STDIN
+      else
+         fd = open(arg, READ)
+      if (fd == ERR)
+         call cant(arg)
+      call sed(linbuf, lineno, fd)
+      if (fd ^= STDIN)
+         call close(fd)
+      nfiles = nfiles + 1
+      }
+   if (nfiles == 0)
+      call sed(linbuf, lineno, STDIN)
+   if (linbuf(1) ^= EOS) {      # set last line number and do last line
+      lineno = lineno + 1
+      for (i = cmdbuf(COMMANDLIST+NEXT); i > 0; i = cmdbuf(i+NEXT)) {
+         if (cmdbuf(i+LINE1) == -HUGE)
+            cmdbuf(i+LINE1) = -lineno
+         if (cmdbuf(i+LINE2) == -HUGE)
+            cmdbuf(i+LINE2) = -lineno
+         if (cmdbuf(i+COMMAND) == CHANGECOM) #clean unsatisfied c commands
+            {
+            if (cmdbuf(i+NLINES) == 2)
+               cmdbuf(i+NLINES) = 1    # insures changed text is output
+            if (cmdbuf(i+NLINES) == 3 & (cmdbuf(i+LINE2) > 0 |
+               -cmdbuf(i+LINE2) >= lineno))
+               cmdbuf(i+LINE2) = -lineno
+            }
+         }
+      call docmds(linbuf, lineno)
+      }
+   DRETURN
+   end
+#-t-  sedit                      4141  local   12/24/80  14:06:02
+#-h-  addwrd          279  local  09/22/80  15:38:58
+# addwrd - put w in array (j) if it fits, increment j
+
+   integer function addwrd (w, arr, j, maxsiz)
+   integer j, maxsiz
+   integer w, arr (maxsiz)
+
+   if (j > maxsiz)
+      addwrd = NO
+   else {
+      arr(j) = w
+      j = j + 1
+      addwrd = YES
+      }
+
+   return
+   end
+#-t-  addwrd          279  local  09/22/80  15:38:58
+#-h-  ckp                         375  local   12/24/80  14:06:04
+# ckp - check for "p" after command
+   integer function ckp(lin, i, pflag, status)
+   character lin(MAXLINE)
+   integer i, j, pflag, status
+   character clower
+
+   j = i
+   if (clower(lin(j)) == PRINT) {
+      j = j + 1
+      pflag = YES
+      }
+   else
+      pflag = NO
+   if (lin(j) == NEWLINE)
+      status = YES
+   else
+      status = ERR
+   ckp = status
+   return
+   end
+#-t-  ckp                         375  local   12/24/80  14:06:04
+#-h-  compil                     3024  local   12/24/80  14:06:04
+# compil - "compile" command in lin(i) from file fd, increment i
+   subroutine compil(lin, fd)
+   character lin(MAXLINE)
+   integer fd
+   character file(MAXNAME), sub(MAXPAT)
+   integer i, gflag, pflag, status, fdw
+   integer addwrd, addset, addstr, create, getrhs, getfn, ckp, optpat, dotext,
+      getlst, length
+   character clower
+   include "csedit.i"
+
+   status = ERR
+   i = 1
+   if (getlst(lin, i, status) == ERR) {
+      call putlin(lin, ERROUT)
+      call error("bad line numbers.")
+      }
+   call skipbl(lin, i)
+   cmdbuf(prevc+NEXT) = lastcm     # link in new command
+   prevc = lastcm
+   status = addwrd(nlines, cmdbuf, lastcm, MAXCMD)
+   status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+   status = addwrd(line1, cmdbuf, lastcm, MAXCMD)
+   status = addwrd(line2, cmdbuf, lastcm, MAXCMD)
+                                    #fold commands to lower case
+   status = addwrd(clower(lin(i)), cmdbuf, lastcm, MAXCMD)
+   if (clower(lin(i)) == APPENDCOM & lin(i+1) == NEWLINE & fd ^= NO) {
+      status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+      status = dotext(fd)
+      }
+   else if (clower(lin(i)) == CHANGECOM & lin(i+1) == NEWLINE & fd ^= NO) {
+      status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+      status = dotext(fd)
+      }
+   else if (clower(lin(i)) == DELETECOM & lin(i+1) == NEWLINE)
+      status = YES
+   else if (clower(lin(i)) == FILECOM) {
+      status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+      status = addwrd(lastbf, cmdbuf, lastcm, MAXCMD)
+      status = getfn(lin, i, file)
+      if (status == YES) {
+         status = addstr(file, buf, lastbf, MAXBUF)
+         status = addset(EOS, buf, lastbf, MAXBUF)
+         }
+      }
+   else if (clower(lin(i)) == INSERTCOM & lin(i+1) == NEWLINE & fd ^= NO) {
+      status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+      status = dotext(fd)
+      }
+   else if (clower(lin(i)) == PRINTCOM & lin(i+1) == NEWLINE)
+      status = YES
+   else if (clower(lin(i)) == READCOM) {
+      status = addwrd(0, cmdbuf, lastcm, MAXCMD)
+      status = addwrd(lastbf, cmdbuf, lastcm, MAXCMD)
+      status = getfn(lin, i, file)
+      if (status == YES) {
+         status = addstr(file, buf, lastbf, MAXBUF)
+         status = addset(EOS, buf, lastbf, MAXBUF)
+         }
+      }
+   else if (clower(lin(i)) == SUBSTCOM) {
+      i = i + 1
+      if (optpat(lin, i) == YES)
+         andif (getrhs(lin, i, sub, gflag) == YES)
+            status = ckp(lin, i + 1, pflag, status)
+      if (status == YES) {
+         status = addwrd(gflag, cmdbuf, lastcm, MAXCMD)
+         status = addwrd(pflag, cmdbuf, lastcm, MAXCMD)
+         status = addwrd(lastbf, cmdbuf, lastcm, MAXCMD)
+         status = addstr(pat, buf, lastbf, MAXBUF)
+         status = addset(EOS, buf, lastbf, MAXBUF)
+         status = addwrd(lastbf, cmdbuf, lastcm, MAXCMD)
+         status = addstr(sub, buf, lastbf, MAXBUF)
+         status = addset(EOS, buf, lastbf, MAXBUF)
+         }
+      }
+   else if (clower(lin(i)) == WRITECOM) {
+      status = getfn(lin, i, file)
+      if (status == YES) {
+         fdw = create(file, WRITE)
+         if (fdw == ERR)
+            call cant(file)
+         }
+      status = addwrd(fdw, cmdbuf, lastcm, MAXCMD)
+      }
+   else if (clower(lin(i)) == EQUALCOM & lin(i+1) == NEWLINE)
+      status = YES
+   else
+      status = ERR
+   if (status ^= YES) {
+      call putlin(lin, ERROUT)
+      if (lastcm > MAXCMD | lastbf > MAXBUF)
+         call error("too many commands.")
+      else
+         call error("invalid command.")
+      }
+   return
+   end
+#-t-  compil                     3024  local   12/24/80  14:06:04
+#-h-  docmds                     2289  local   12/24/80  14:06:06
+# docmds-execute commands in buf on linbuf, which contains line lineno
+   subroutine docmds(linbuf, lineno)
+   character linbuf(MAXLINE)
+   integer lineno
+   integer i, n
+   integer match
+   include "csedit.i"
+
+   aq = APPENDLIST      # initialize append and insert queues
+   cmdbuf(aq+LIST) = 0
+   iq = INSERTLIST
+   cmdbuf(iq+LIST) = 0
+   for (i = cmdbuf(COMMANDLIST+NEXT); i ^= 0; i = cmdbuf(i+NEXT)) {
+      nlines = cmdbuf(i+NLINES)
+      line1 = cmdbuf(i+LINE1)
+      line2 = cmdbuf(i+LINE2)
+     if (nlines == 0)
+         call docom(i, linbuf, lineno)
+      else if (nlines == 1) {
+         if (-line1 == lineno)
+            call docom(i, linbuf, lineno)
+         else if (line1 > 0)
+                 andif (match(linbuf, buf(line1)) > 0)
+                    call docom(i, linbuf, lineno)
+         }
+      else if (nlines == 2) {   # 2 line numbers, searching for line1
+         if (-line1 == lineno) {
+            cmdbuf(i+NLINES) = 3   # found it, change state
+            call docom(i, linbuf, lineno)
+            }
+         else if (line1 > 0)
+                 andif (match(linbuf, buf(line1)) > 0) {
+                    cmdbuf(i+NLINES) = 3
+                    call docom(i, linbuf, lineno)
+                    }
+         }
+      else if (nlines == 3) {   # 2 line numbers, searching for line2
+         if (line2 <= 0) {
+            if (lineno >= -line2)
+               cmdbuf(i+NLINES) = 2        # found it, change state
+            if (lineno <= -line2)
+               call docom(i, linbuf, lineno)
+            }
+         else if (line2 > 0) {
+            if (match(linbuf, buf(line2)) > 0)
+               cmdbuf(i+NLINES) = 2
+            call docom(i, linbuf, lineno)
+            }
+         }
+      else
+         call error("in docmds: can't happen.")
+      if (linbuf(1) == EOS & lineno > 0)
+         break
+      }
+                                           # output inserts
+   for (i = cmdbuf(INSERTLIST+LIST); i > 0; i = cmdbuf(i+LIST))
+      call putlin(buf(cmdbuf(i+TEXT)), STDOUT)
+   if (nflag == NO)
+      call putlin(linbuf, STDOUT)
+                                      # output appends
+   for (i = cmdbuf(APPENDLIST+LIST); i > 0; i = cmdbuf(i+LIST))
+      if (cmdbuf(i+COMMAND) == READCOM)
+         call fcopy(buf(cmdbuf(i+TEXT)), STDOUT)        # do r command
+      else
+         call putlin(buf(cmdbuf(i+TEXT)), STDOUT)
+   return
+   end
+#-t-  docmds                     2289  local   12/24/80  14:06:06
+#-h-  docom                      1253  local   12/24/80  14:06:06
+# docom - execute a single command at buf(i) on linbuf and lineno
+   subroutine docom(i, linbuf, lineno)
+   character linbuf(MAXLINE)
+   integer i, lineno
+   character cmd
+   integer k1, k2, junk
+   include "csedit.i"
+
+   cmd = cmdbuf(i+COMMAND)
+   if (cmd == APPENDCOM) {
+      cmdbuf(aq+LIST) = i
+      aq = i
+      cmdbuf(i+LIST) = 0
+      }
+   else if (cmd == CHANGECOM) {
+      linbuf(1) = EOS
+      if (cmdbuf(i+NLINES) <= 2) {
+         cmdbuf(aq+LIST) = i
+         aq = i
+         cmdbuf(i+LIST) = 0
+         }
+      }
+   else if (cmd == DELETECOM)
+      linbuf(1) = EOS
+   else if (cmd == FILECOM) {
+      k1 = cmdbuf(i+TEXT)
+      i = prevc  # point i at last command so that for loop in docmds will exit
+      call scrfil(buf(k1))
+      }
+   else if (cmd == INSERTCOM) {
+      cmdbuf(iq+LIST) = i
+      iq = i
+      cmdbuf(i+LIST) = 0
+      }
+   else if (cmd == PRINTCOM)
+      call putlin(linbuf, STDOUT)
+   else if (cmd == READCOM) {
+      cmdbuf(aq+LIST) = i
+      aq = i
+      cmdbuf(i+LIST) = 0
+      }
+   else if (cmd == SUBSTCOM) {
+      k1 = cmdbuf(i+SUBSTPAT)
+      k2 = cmdbuf(i+SUBSTNEW)
+      call subst(linbuf, buf(k1), buf(k2),
+                cmdbuf(i+SUBSTGFLAG), cmdbuf(i+SUBSTPFLAG))
+      }
+   else if (cmd == WRITECOM) {
+      if (cmdbuf(i+WRITEFD) ^= 0)
+         call putlin(linbuf, buf(i+WRITEFD))
+      }
+   else if (cmd == EQUALCOM) {
+      call putdec(lineno, 1)
+      call putc(NEWLINE)
+      }
+   # else ignore command
+   return
+   end
+#-t-  docom                      1253  local   12/24/80  14:06:06
+#-h-  dotext                      382  local   12/24/80  14:06:07
+# dotext - append text in file fd onto buf
+   integer function dotext(fd)
+   integer fd
+   integer getlin, addwrd, addset, addstr
+   character lin(MAXLINE)
+   include "csedit.i"
+
+   junk = addwrd (lastbf, cmdbuf, lastcm, MAXCMD)
+   while (getlin(lin, fd) ^= EOF) {
+      if (lin(1) == PERIOD & lin(2) == NEWLINE)
+         break
+      junk = addstr(lin, buf, lastbf, MAXBUF)
+      }
+   dotext = addset(EOS, buf, lastbf, MAXBUF)
+   return
+   end
+#-t-  dotext                      382  local   12/24/80  14:06:07
+#-h-  fcopy                       339  local   12/24/80  14:06:07
+# fcopy - copy file name to opened file fdo
+   subroutine fcopy(name, fdo)
+   character name(ARB)
+   integer fdo
+   integer fdi
+   integer open
+   character c
+   character getch
+
+   fdi = open(name, READ)
+   if (fdi == ERR)
+      call cant(name)
+   while (getch(c, fdi) ^= EOF)
+      call putch(c, fdo)
+   call close(fdi)
+   return
+   end
+#-t-  fcopy                       339  local   12/24/80  14:06:07
+#-h-  getfn                       460  local   12/24/80  14:06:07
+# getfn - get file name from lin(i)...
+   integer function getfn(lin, i, file)
+   character lin(MAXLINE), file(MAXLINE)
+   integer i, j, k
+
+   getfn = ERR
+   if (lin(i + 1) == BLANK | lin(i + 1) == TAB) {
+      j = i + 2      # get new file name
+      call skipbl(lin, j)
+      for (k = 1; lin(j) ^= NEWLINE; k = k + 1) {
+         file(k) = lin(j)
+         j = j + 1
+         }
+      file(k) = EOS
+      if (k > 1)
+         getfn = YES
+      }
+   return
+   end
+#-t-  getfn                       460  local   12/24/80  14:06:07
+#-h-  getlst                      504  local   12/24/80  14:06:08
+# getlst - get a list of line numbers starting at lin(i), increment i
+   integer function getlst(lin, i, status)
+   character lin(MAXLINE)
+   integer i
+   integer status    # ignored
+   integer num
+   integer getone
+   include "csedit.i"
+
+   nlines = 0
+   if (getone(lin, i, num) == EOF)
+      return(YES)
+   line1 = num
+   nlines = nlines + 1
+   if (lin(i) ^= COMMA)
+      return(YES)
+   i = i + 1
+   if (getone(lin, i, num) ^= YES)
+      return(ERR)
+   line2 = num
+   nlines = nlines + 1
+   return(YES)
+   end
+#-t-  getlst                      504  local   12/24/80  14:06:08
+#-h-  getone                     1025  local   12/24/80  14:06:08
+# getone - evaluate one line number expression, increment i
+   integer function getone(lin, i, num)
+   character lin(MAXLINE)
+   integer i, istart, num
+   integer addstr, addset, ctoi, optpat
+   include "csedit.i"
+
+   getone = YES
+   call skipbl(lin, i)
+   istart = i
+   if (lin(i) >= DIG0 & lin(i) <= DIG9) {
+      num = ctoi(lin, i)
+      i = i - 1   # move back; to be advanced at the end
+      if (num < 0)
+         getone = ERR
+      num = -num
+      }
+   else if (lin(i) == LASTLINE)
+      num = -HUGE
+   else if (lin(i) == SLASH) {
+      if (optpat(lin, i) == ERR)   # build the pattern
+         getone = ERR
+      else if (lin(i) == SLASH) {
+         num = lastbf
+         junk = addstr(pat, buf, lastbf, MAXBUF)
+         if (addset(EOS, buf, lastbf, MAXBUF) == NO)
+            getone = ERR
+         }
+      }
+   else
+      getone = EOF
+   if (getone == YES)
+      i = i + 1   # point at next character to be examined
+   call skipbl(lin, i)
+   if (i <= istart)
+      getone = EOF
+   else
+      getone = YES
+   return
+   end
+#-t-  getone                     1025  local   12/24/80  14:06:08
+#-h-  getrhs                      493  local   12/24/80  14:06:09
+# getrhs - get substitution string for "s" command
+   integer function getrhs(lin, i, sub, gflag)
+   character lin(MAXLINE), sub(MAXPAT)
+   integer maksub
+   character clower
+   integer gflag, i
+
+   getrhs = ERR
+   if (lin(i) == EOS)
+      return
+   if (lin(i + 1) == EOS)
+      return
+   i = maksub(lin, i + 1, lin(i), sub)
+   if (i == ERR)
+      return
+   if (clower(lin(i + 1)) == GLOBAL) {
+      i = i + 1
+      gflag = YES
+      }
+   else
+      gflag = NO
+   getrhs = YES
+   return
+   end
+#-t-  getrhs                      493  local   12/24/80  14:06:09
+#-h-  optpat                      545  local   12/24/80  14:06:09
+# optpat - make pattern if specified at lin(i)
+   integer function optpat(lin, i)
+   character lin(MAXLINE)
+   integer makpat
+   integer i
+   include "csedit.i"
+
+   if (lin(i) == EOS)
+      i = ERR
+   else if (lin(i + 1) == EOS)
+      i = ERR
+   else if (lin(i + 1) == lin(i))   # repeated delimiter
+      i = i + 1         # leave existing pattern alone
+   else
+      i = makpat(lin, i + 1, lin(i), pat)
+   if (pat(1) == EOS)
+      i = ERR
+   if (i == ERR) {
+      pat(1) = EOS
+      optpat = ERR
+      }
+   else
+      optpat = YES
+   return
+   end
+#-t-  optpat                      545  local   12/24/80  14:06:09
+#-h-  scrfil                      339  local   12/24/80  14:06:10
+# scrfil - read in new script file
+   subroutine scrfil(name)
+   character name(ARB)
+   integer fd
+   character lin(MAXLINE)
+   integer open, getlin
+   include "csedit.i"
+
+   fd = open(name, READ)
+   if (fd == ERR)
+      call cant(name)
+   prevc = COMMANDLIST  # initialize lists
+   cmdbuf(COMMANDLIST+NEXT) = 0
+   lastcm = FIRSTFREE
+   lastbf = 1
+   while (getlin(lin, fd) ^= EOF)
+      call compil(lin, fd)
+   call close(fd)
+   return
+   end
+#-t-  scrfil                      339  local   12/24/80  14:06:10
+#-h-  sed                         818  local   12/24/80  14:06:10
+# sed - execute all commands for file fd, use linbuf and increment lineno
+   subroutine sed(linbuf, lineno, fd)
+   character linbuf(MAXLINE)
+   integer lineno, fd
+   character buf1(MAXLINE), buf2(MAXLINE)
+   integer getlin
+   include "csedit.i"
+
+   if (getlin(buf1, fd) == EOF)
+      return
+   if (lineno > 0) {    # do previous last line
+      lineno = lineno + 1
+      call docmds(linbuf, lineno)
+      }
+   repeat {
+      if (getlin(buf2, fd) == EOF) {    # buf1 contains last line
+         call scopy(buf1, 1, linbuf, 1)
+         break
+         }
+      lineno = lineno + 1
+      call docmds(buf1, lineno)
+      if (getlin(buf1, fd) == EOF) {    # buf2 contains last line
+         call scopy(buf2, 1, linbuf, 1)
+         break
+         }
+      lineno = lineno + 1
+      call docmds(buf2, lineno)
+      }
+   return
+   end
+#-t-  sed                         818  local   12/24/80  14:06:10
+#-h-  subst                      1052  local   12/24/80  14:06:11
+# subst - substitute sub for occurrences of pat in txt
+   subroutine subst(txt, pat, sub, gflag, pflag)
+   character txt(MAXLINE), pat(ARB), sub(ARB)
+   integer gflag, pflag
+   character new(MAXLINE)
+   integer addset, amatch
+   integer j, junk, k, lastm, m, subbed, tagbeg (10), tagend (10)
+
+   j = 1
+   subbed = NO
+   lastm = 0
+   for (k = 1; txt(k) ^= EOS; ) {
+      if (gflag == YES | subbed == NO)
+         m = amatch(txt, k, pat, tagbeg, tagend)
+      else
+         m = 0
+      if (m > 0 & lastm ^= m) {   # replace matched text
+         subbed = YES
+         call catsub(txt, tagbeg, tagend, sub, new, j, MAXLINE)
+         lastm = m
+         }
+      if (m == 0 | m == k) {   # no match or null match
+         junk = addset(txt(k), new, j, MAXLINE)
+         k = k + 1
+         }
+      else            # skip matched text
+         k = m
+      }
+   if (subbed == YES) {
+      if (addset(EOS, new, j, MAXLINE) == NO)
+         return
+      call scopy(new, 1, txt, 1)
+      if (pflag == YES)
+         call putlin(txt, STDOUT)
+      }
+   return
+   end
+#-t-  subst                      1052  local   12/24/80  14:06:11
+#-h-  usage                       150  local   12/24/80  14:06:11
+# usage - print usage message
+  subroutine usage
+
+  call error(_
+   "usage: sedit [-n] [[-e script | -f sfiles] | script] [files].")
+   return
+   end
+#-t-  usage                       150  local   12/24/80  14:06:11
+#-t-  sedit.r                   19300  local   12/24/80  14:07:08

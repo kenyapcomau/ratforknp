@@ -1,0 +1,739 @@
+define(char,integer)
+define(FILEA,1)
+define(FILEB,2)
+define(STDERR,5)
+define(STDOUT,6)
+define(HASHCONST,2147483647)    # prime, < (maxint div 4 - maxordchar)
+define(APPEND,LETA)
+define(CHANGE,LETC)
+define(DELETE,LETD)
+define(EOF,-1)
+define(EOS,0)
+define(NEWLINE,10)
+define(BLANK,32)
+define(COMMA,44)
+define(MINUS,45)
+define(LESS,60)
+define(GREATER,62)
+define(LETA,97)
+define(LETC,99)
+define(LETD,100)
+define(NO,0)
+define(YES,1)
+define(ARB,1)
+define(INSIZE,80)
+define(OUTSIZE,80)
+define(MAXCHARS,6)
+define(MAXDIFF,1024)     # MAXDIFF < MAXLINES
+define(MAXLINES,2048)
+define(MAXVEC,2050)     # MAXLINES + 2
+#       diff - differential file comparison
+#
+#            uses an algorithm due to harold stone, which finds
+#       a pair of longest identical  subsequences  in  the  two
+#       files.
+#
+#            the major goal is to  generate  the  match  vector
+#       jvec.   jvec[i]  is  the  index  of  the  line in FILEB
+#       corresponding to line i FILEA. jvec[i] = 0 if there  is
+#       no such line in FILEB.
+#
+#            lines are hashed by 'rdhash' into arrays fhash? so
+#       as  to  work in core.  next 'prune' reduces the problem
+#       space by trimming the common beginning and  endings  of
+#       the  two  files and placing the values into fval?.  all
+#       further discussion refers to the trimmed  hash  values.
+#       all  potential matches are located by sorting the lines
+#       of each file on the hash.  fser? is an array containing
+#       the serial line numbers for ease of unsorting.  in par-
+#       ticular, this collects the equivalence classes in FILEB
+#       together.   subroutine  'equiv'  replaces  the value of
+#       each line in FILEA by the index of the first element of
+#       its  matching equivalence in (the reordered) FILEB.  to
+#       save space 'equiv' squeezes FILEB into a  single  array
+#       'member'  in  which  the equivalence classes are simply
+#       concatenated,  except  that  their  first  members  are
+#       flagged by changing sign.
+#
+#            next the indices  that  point  into  'member'  are
+#       'unsort'ed into array 'class' according to the original
+#       order of FILEA.
+#
+#            the  cleverness  lies  in  routine  'stone'.  this
+#       marches through the lines of FILEA, developing a vector
+#       klist  of  "k-candidates". at step x a k-candidate is a
+#       matched pair of lines x,y (x in FILEA y in FILEB)  such
+#       that  there is a common subsequence of length k between
+#       the first x lines of FILEA and the  first  y  lines  of
+#       FILEB, but there is no such subsequence for any smaller
+#       y.  x is the earliest possible mate to y that occurs in
+#       such a subsequence.
+#
+#            whenever any of the  members  of  the  equivalence
+#       class  of lines in FILEB matable to a line in FILEA has
+#       serial number less than the y of some k-candidate, that
+#       k-candidate  with the smallest such y is replaced.  the
+#       new k-candidate is chained (via 'pred') to the  current
+#       k-1  candidate  so  that  the actual subsequence can be
+#       recovered.  when a member  has  serial  number  greater
+#       that  the y of all k-candidates, the klist is extended.
+#       at the end, the longest subsequence is pulled  out  and
+#       placed in the array jvec by 'unrav'.
+#
+#            with jvec in hand, the matches there recorded  are
+#       checked  against  reality  to  assure  that no spurious
+#       matches have crept in due to hashing.   if  they  have,
+#       they are broken, and "jackpot " is recorded--a harmless
+#       matter except that a true match for a spuriously  mated
+#       line may now be unnecessarily reported as a CHANGE.
+#
+#            memory space is  conserved  by  overlaying  arrays
+#       when possible.
+#
+
+implicit none
+integer k
+
+include "diff.i"
+
+call init
+call rdhash(fhash1,FILEA,len1)
+call rdhash(fhash2,FILEB,len2)
+call prune
+call qsort(fval1,fser1,slen1)
+call qsort(fval2,fser2,slen2)
+# debug output
+#do i=1,slen1{
+#       write(STDERR,600)i,fval1(i),fser1(i)
+#       600 format(3i10)
+#       }
+#do i=1,slen2{
+#       write(STDERR,600)i,fval2(i),fser2(i)
+#       }
+#
+call equiv
+call compac
+call unsort
+# debug output
+#do i=1,slen1{
+#       write(STDERR,600)class(i),member(i)
+#       }
+#
+call stone(k)
+call unrav(k)
+call check
+call output
+end
+blockdata
+implicit none
+
+include "diff.i"
+
+data linect(FILEA)/0/
+data linect(FILEB)/0/
+data lastc/0/
+end
+# change - output editor commands
+
+subroutine change(a,b,c,d)
+implicit none
+integer a,b,c,d
+string dashes "---"
+
+if(a > b & c > d)
+        return
+call range(a,b)
+if(a > b)
+        call putc(APPEND)
+else if(c > d)
+        call putc(DELETE)
+else
+        call putc(CHANGE)
+call range(c,d)
+call putc(NEWLINE)
+call getrge(a,b,FILEA)
+if(a <= b & c <= d)
+        call putlin(dashes)
+call getrge(c,d,FILEB)
+return
+end
+# check - see that matches are genuine
+
+subroutine check
+implicit none
+integer equal,fetch
+integer i,newl
+char line2(INSIZE)
+
+include "diff.i"
+
+string jacmsg "Jackpot"
+
+call rwf
+for(i=2; i <= len1+1; i=i+1){
+        newl=jvec(i)
+        if(newl == 0)
+                next
+        if(fetch(inline,FILEA,i-1) == EOF)
+                call error('Impossible')
+        if(fetch(line2,FILEB,newl) == EOF)
+                call error('Impossible')
+        if(equal(inline,line2) == NO)
+                call putlin(jacmsg)
+        }
+return
+end
+# compac - compact entries for FILEB
+
+subroutine compac
+implicit none
+integer i
+
+include "diff.i"
+
+fval2(slen2+1)=0
+for(i=1; i <= slen2; i=i+1){
+        member(i)=-fser2(i)
+        while(fval2(i+1) == fval2(i)){
+                i=i+1
+                member(i)=fser2(i)
+                }
+        }
+member(i)=-1
+return
+end
+# compar - function to compare two keys
+
+integer function compar(key1,key2,i,j)
+implicit none
+integer key1(ARB),key2(ARB),i,j
+
+if(key1(i) == key1(j) & key2(i) == key2(j)){
+        compar=0
+        return
+        }
+if(key1(i) > key1(j) |
+        (key1(i) == key1(j) & key2(i) > key2(j))){
+        compar=1
+        return
+        }
+compar=-1
+return
+end
+# equal - compare str1 to str2; return yes if equal, no if not
+
+integer function equal(str1,str2)
+implicit none
+char str1(ARB),str2(ARB)
+integer i
+
+for(i=1; str1(i) == str2(i); i=i+1)
+        if(str1(i) == EOS){
+                equal=YES
+                return
+                }
+equal=NO
+return
+end
+# equiv - establishes equivalence classes between FILEA and FILEB
+
+subroutine equiv
+implicit none
+integer i,j
+
+include "diff.i"
+
+i=1
+j=1
+while(i <= slen1 & j <= slen2){
+        if(fval1(i) < fval2(j)){
+                fval1(i)=0
+                i=i+1
+                }
+        else if(fval1(i) == fval2(j)){
+                fval1(i)=j
+                i=i+1
+                }
+        else
+                j=j+1
+        }
+while(i <= slen1){
+        fval1(i)=0
+        i=i+1
+        }
+return
+end
+# error - prints error message and then halts
+
+subroutine error(msg)
+implicit none
+character *(*) msg
+
+write(STDERR,9060)msg
+9060 format(a)
+stop
+end
+# exchan - for quicksort
+
+subroutine exchan(key1,key2,i,j)
+implicit none
+integer key1(ARB),key2(ARB),i,j,temp
+
+include "diff.i"
+
+temp=key1(i)
+key1(i)=key1(j)
+key1(j)=temp
+
+temp=key2(i)
+key2(i)=key2(j)
+key2(j)=temp
+return
+end
+# fetch - gets line of a specified serial number from a file
+
+integer function fetch(buf,fileno,lineno)
+implicit none
+integer getlin
+integer fileno,lineno
+char buf(ARB)
+
+include "diff.i"
+
+repeat{
+        fetch=getlin(buf,fileno)
+        linect(fileno)=linect(fileno)+1
+        }until(fetch == EOF | linect(fileno) >= lineno)
+return
+end
+# getlin - gets an input line
+
+integer function getlin(buf,fileno)
+implicit none
+char buf(ARB)
+integer fileno
+integer i
+
+read(fileno,9050,end=1000)(buf(i),i=1,INSIZE)
+9050 format(INSIZE a1)
+do i=1,INSIZE
+        call ilbyte(buf(i),buf(i),0)
+for(i=INSIZE; i > 0; i=i-1)
+        if(buf(i) != BLANK)
+                break
+if(i > INSIZE-2)
+        i=INSIZE-2
+buf(i+1)=NEWLINE
+buf(i+2)=EOS
+getlin=YES
+return
+
+1000 getlin=EOF
+return
+end
+# getrge - print range of lines from a file
+
+subroutine getrge(a,b,fileno)
+implicit none
+integer fetch
+integer a,b,fileno,i
+
+include "diff.i"
+
+for(i=a; i <= b; i=i+1){
+        if(fetch(inline,fileno,i) == EOF)
+                break
+        if(fileno == FILEA)
+                call putc(LESS)
+        else
+                call putc(GREATER)
+        call putc(BLANK)
+        call putlin(inline)
+        }
+return
+end
+# hashs - hash a string into number from 0 to tabsiz-1
+
+integer function hashs(s,tabsiz)
+implicit none
+char s(ARB)
+integer i,tabsiz
+
+hashs=0
+for(i=1;s(i) != EOS;i=i+1)
+        hashs=mod(hashs*4+s(i),tabsiz)
+return
+end
+# init - initialize diff
+
+subroutine init
+implicit none
+
+call rwf
+call carcon(STDERR,0)
+call carcon(STDOUT,0)
+return
+end
+# itoa - convert int to char string in str
+
+integer function itoa(int,str,size)
+implicit none
+integer iabs,mod
+integer d,i,int,intval,j,size
+char k,str(size)
+
+string digits "0123456789"
+
+intval=iabs(int)
+str(1)=EOS
+i=1
+repeat{
+        i=i+1
+        d=mod(intval,10)
+        str(i)=digits(d+1)
+        intval=intval/10
+        }until(intval == 0 | i >= size)
+if(int < 0 & i < size){   # then sign
+        i=i+1
+        str(i)=MINUS
+        }
+itoa=i-1
+for(j=1; j < i; j=j+1){   # then reverse
+        k=str(i)
+        str(i)=str(j)
+        str(j)=k
+        i=i-1
+        }
+return
+end
+# newcan - enter new candidate for stone's algorithm
+
+integer function newcan(x,y,prd)
+implicit none
+integer x,y,prd
+
+include "diff.i"
+
+clen=clen+1
+if(clen > MAXDIFF)
+        call error('Too many differences')
+xpart(clen)=x
+ypart(clen)=y
+pred(clen)=prd
+newcan=clen
+return
+end
+# output - print out lines that differ
+
+subroutine output
+implicit none
+integer m,i0,i1,j0,j1
+
+include "diff.i"
+
+call rwf
+m = len1
+jvec(1) = 0                     # sentinels
+jvec(m+2) = len2+1              # indices into jvec are displaced up by 1
+# debug output
+#do i=1,len1+2{
+#       write(STDOUT,600)i-1,jvec(i)
+#       600 format('line ',i10,' jvec= ',i10)
+#       }
+#
+for(i0=1;i0 <= m;i0=i1+1){      # look for abnormal runs
+        while(i0 <= m & jvec(i0+1) == jvec(i0)+1)
+                i0=i0+1         # while in sequence
+        i1 = i0-1               # end of original sequence
+        j0 = jvec(i1+1)+1       # what it should be if in order
+        while(i1 < m & jvec(i1+2) == 0)
+                i1=i1+1         # look for end of mismatch
+        j1 = jvec(i1+2)-1       # last line of replacement
+        jvec(i1+1) = j1         # zap it so we won't hit it again
+        call change(i0,i1,j0,j1)
+        }
+if(m == 0)
+        call change(1,0,1,len2)   # special case
+return
+end
+# prune - remove common beginning and end from two sequences
+
+subroutine prune
+implicit none
+integer i
+
+include "diff.i"
+
+for(pref=0; pref < len1 & pref < len2 &
+        fhash1(pref+1) == fhash2(pref+1); pref=pref+1)
+        ;
+for(suff=0; suff < len1-pref & suff < len2-pref &
+        fhash1(len1-suff) == fhash2(len2-suff); suff=suff+1)
+        ;
+slen1=len1-pref-suff
+slen2=len2-pref-suff
+if(slen1 >= MAXDIFF | slen2 >= MAXDIFF)
+        call error('Too many differences')
+for(i=1; i <= slen1; i=i+1){
+        fval1(i)=fhash1(i+pref)
+        fser1(i)=i
+        }
+for(i=1; i <= slen2; i=i+1){
+        fval2(i)=fhash2(i+pref)
+        fser2(i)=i
+        }
+return
+end
+# putc - puts character on output unit
+
+subroutine putc(c)
+implicit none
+integer i
+char buf(OUTSIZE),c
+
+include "diff.i"
+
+if(lastc >= OUTSIZE | c == NEWLINE){
+        if(lastc > 0){
+                do i=1,lastc
+                        call isbyte(buf(i),buf(i),0)
+                write(STDOUT,9060)(buf(i),i=1,lastc)
+                }
+        else
+                write(STDOUT,9060)
+        9060 format(OUTSIZE a1)
+        lastc=0
+        }
+if(c == NEWLINE)
+        return
+lastc=lastc+1
+buf(lastc)=c
+return
+end
+# putdec - output decimal integer
+
+subroutine putdec(n)
+implicit none
+char chars(MAXCHARS)
+integer itoa
+integer i,n,nd
+
+nd=itoa(n,chars,MAXCHARS)
+for(i=1; i <= nd; i=i+1)
+        call putc(chars(i))
+return
+end
+# putlin - puts a line on output file
+
+subroutine putlin(in)
+implicit none
+char in(ARB)
+integer i
+
+for(i=1; in(i) != NEWLINE & in(i) != EOS; i=i+1)
+        call putc(in(i))
+call putc(NEWLINE)
+return
+end
+# qsort - quicksort
+
+define(LOGPTR,16)
+
+subroutine qsort(key1,key2,nitems)
+implicit none
+integer compar
+integer key1(ARB),key2(ARB)
+integer i,j,lv(LOGPTR),nitems,p,pivot,uv(LOGPTR)
+
+lv(1)=1
+uv(1)=nitems
+p=1
+while(p>0){
+        if(lv(p) >= uv(p))      # only one element in this subset
+                p=p-1           # pop stack
+        else{
+                i=lv(p)-1
+                j=uv(p)
+                pivot=j         # pivot item
+                while(i<j){
+                        for(i=i+1; compar(key1,key2,i,pivot) < 0;i=i+1)
+                                ;
+                        for(j=j-1;j>i;j=j-1)
+                                if(compar(key1,key2,j,pivot) <= 0)
+                                        break
+                        if(i<j)         # out of order pair
+                                call exchan(key1,key2,i,j)
+                        }
+                j=uv(p)         # move pivot to position i
+                call exchan(key1,key2,i,j)
+                if(i-lv(p) < uv(p)-i){    # stack so shorter done first
+                        lv(p+1)=lv(p)
+                        uv(p+1)=i-1
+                        lv(p)=i+1
+                        }
+                else{
+                        lv(p+1)=i+1
+                        uv(p+1)=uv(p)
+                        uv(p)=i-1
+                        }
+                p=p+1                   # push onto stack
+                }
+        }
+return
+end
+# range - output range of line numbers
+
+subroutine range(a,b)
+implicit none
+integer a,b
+
+if(a > b)
+        call putdec(b)
+else
+        call putdec(a)
+if(a < b){
+        call putc(COMMA)
+        call putdec(b)
+        }
+return
+end
+# rdhash - read in file and hash lines
+
+subroutine rdhash(fhash,fileno,len)
+implicit none
+integer getlin,hashs
+integer len
+integer fhash(MAXLINES),fileno
+
+include "diff.i"
+
+len=0
+while(getlin(inline,fileno) != EOF){
+        len=len+1
+        if(len > MAXLINES)
+                call error('File too big')
+        fhash(len)=hashs(inline,HASHCONST)
+        }
+return
+end
+# rwf - rewind input files
+
+subroutine rwf
+implicit none
+
+include "diff.i"
+
+rewind FILEA
+rewind FILEB
+linect(FILEA)=0
+linect(FILEB)=0
+return
+end
+# search - for subroutine stone
+
+integer function search(k,y)
+implicit none
+integer k,y
+integer lower,upper,value
+
+include "diff.i"
+
+if(y > ypart(klist(k))){        # quick look for typical case
+        search=k+1              # not in list
+        return
+        }
+lower = 1
+upper = k
+while(lower < upper){
+        search=(lower+upper)/2
+        value=ypart(klist(search))
+        if(value > y)
+                upper=search-1
+        else if(value < y)
+                lower=search+1
+        else
+                return
+        }
+search=lower            # ypart(klist(lower)) > y here
+return
+end
+# stone - h. stone's file difference algorithm
+
+subroutine stone(klen)
+implicit none
+integer newcan,search
+integer j,l,x,y,oldcan,temcan,oldl,klen
+
+include "diff.i"
+
+clen=0
+klen = 1
+klist(1)=newcan(0,0,0)
+for(x=1; x <= slen1; x=x+1){
+        j = class(x)    # pointer to start of equivalence class
+        if(j == 0)      # no matching line
+                next
+        oldl = 1
+        oldcan = klist(1)
+        for(y=-member(j); y > 0; y=member(j)){  # reverse sign of matching line
+                if(y <= ypart(oldcan)){         # only ascending y's in list
+                        j=j+1
+                        next
+                        }
+                l = search(klen,y)
+                if(l != oldl+1)                 # if not continuation of chain
+                        oldcan = klist(l-1)     # then pred is previous entry
+                if(l > klen){                   # not in list, extend
+                        klist(l) = newcan(x,y,oldcan)
+                        klen=klen+1
+                        break
+                        }
+                else if(y < ypart(klist(l))){   # replace lowest y
+                        temcan = klist(l)
+                        klist(l) = newcan(x,y,oldcan)   # put new candidate in
+                        oldcan = temcan
+                        oldl = l
+                        }
+                else                            # y already in list
+                        j=j+1
+                }
+        }
+return
+end
+# unrav - unravel difference vector
+
+subroutine unrav(p)
+implicit none
+integer i,p,q
+
+include "diff.i"
+
+for(i=1; i <= len1; i=i+1){
+        if(i <= pref)
+                jvec(i+1)=i     # jvec(1) is needed for sentinel
+        else if(i > len1-suff)
+                jvec(i+1)=i+len2-len1
+        else
+                jvec(i+1)=0
+        }
+for(q=p; ypart(q) != 0; q=pred(q)){
+# debug output
+#       write(STDERR,600)q,xpart(q),ypart(q)
+#       600 format(3i10)
+#
+        jvec(xpart(q)+pref+1)=ypart(q)+pref
+        }
+return
+end
+# unsort - put entries back according to line number
+
+subroutine unsort
+implicit none
+integer i
+
+include "diff.i"
+
+for(i=1; i <= slen1; i=i+1)
+        class(fser1(i))=fval1(i)
+return
+end

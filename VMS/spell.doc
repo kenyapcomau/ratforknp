@@ -1,0 +1,59 @@
+.bp 1
+.rm 70
+.in 0 
+.he 'SPELL'1/11/79'SPELL'
+.fo ''-#-' 
+.fi 
+NAME 
+.br 
+.in 7 
+spell - find spelling errors
+.sp 1 
+.in 
+SYNOPSIS 
+.br 
+.in 7 
+spell [file] ...
+.sp 1 
+.in 
+DESCRIPTION 
+.br 
+.in 7 
+Spell
+copies the named files (or standard input if none are specified) to
+standard output while looking up each word in a dictionary.  If any
+spelling errors are found in a particular line, an additional line
+will be printed immediately following the line with asterisks (*)
+beneath the offending words.
+.sp 1
+.in 
+FILES 
+.br 
+.in 7 
+dict - a dictionary file
+.br
+dictdx - an index into the dictionary file, created the first
+time spell is called
+.sp 1 
+.in 
+SEE ALSO 
+.br 
+.in 7 
+.br
+.sp 1 
+.in 
+DIAGNOSTICS
+.br 
+.in 7 
+.sp 1 
+.in 
+AUTHORS 
+.br 
+.in 7 
+.sp 1 
+Joe Sventek, Lawrence Berkeley Laboratory
+.sp 1 
+.in 
+BUGS 
+.br 
+.in 7 

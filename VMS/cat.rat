@@ -1,0 +1,35 @@
+#-h-  cat          655  local  09/12/80  17:06:20
+ #   include the standard symbol definitions
+
+# cat - concatenate named files onto standard output
+
+   DRIVER(cat)
+
+   character name (FILENAMESIZE)
+
+   integer i
+   integer getarg
+
+   filedes fd
+   filedes open
+
+   call query ("usage:  cat [files].")
+
+   for (i = 1; getarg (i, name, FILENAMESIZE) != EOF; i = i + 1) {
+      if (name (1) == MINUS & name (2) == EOS)
+         fd = STDIN
+      else
+         fd = open (name, READ)
+      if (fd == ERR)
+         call cant (name)
+      call fcopy (fd, STDOUT)
+      if (fd != STDIN)
+         call close (fd)
+      }
+
+   if (i == 1)          # no arguments
+      call fcopy (STDIN, STDOUT)
+
+   DRETURN
+   end
+#-t-  cat          655  local  09/12/80  17:06:20

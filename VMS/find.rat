@@ -1,0 +1,548 @@
+define(char,byte)
+define(INFILE,1)
+define(INSIZE,128)
+define(OUTSIZE,128)
+define(STDERR,5)
+define(STDOUT,6)
+define(STDIN,7)
+define(MAXLINE,80)
+define(MAXCHARS,6)
+define(MAXARG,128)
+define(MAXPAT,128)
+define(ARB,1)
+define(NO,0)
+define(YES,1)
+define(OK,1)
+define(COUNT,1)
+define(PREVCL,2)
+define(START,3)
+define(CLOSIZE,4)
+define(ERR,-1)
+define(INV,CARET)
+define(BOL,CARET)
+define(ANY,PERIOD)
+define(EOL,DOLLAR)
+define(CLOSURE,STAR)
+define(KLEENE,PLUS)
+define(CCL,LBRACK)
+define(CCLEND,RBRACK)
+define(NCCL,LETN)
+define(CHARAC,LETA)
+define(ESCAP,BACKSLASH)
+define(EOF,-1)
+define(EOS,0)
+define(NULL,EOS)
+define(NEWLINE,10)
+define(BLANK,32)
+define(DOLLAR,36)
+define(STAR,42)
+define(PLUS,43)
+define(MINUS,45)
+define(DASH,45)
+define(PERIOD,46)
+define(DIG0,48)
+define(DIG9,57)
+define(UPA,65)
+define(UPZ,90)
+define(LBRACK,91)
+define(BACKSLASH,92)
+define(RBRACK,93)
+define(CARET,94)
+define(LETA,97)
+define(LETN,110)
+define(LETZ,122)
+# find - find patterns in text
+
+implicit none
+char arg(MAXARG), lin(INSIZE), pat(MAXPAT)
+integer getlin, getpat, match
+integer lineno
+
+call getarg(arg)
+if (getpat(arg, pat) == ERR)
+	call error('Illegal pattern.')
+lineno = 0
+while (getlin(lin, INFILE) != EOF){
+	lineno = lineno + 1
+	if (match(lin, pat) == YES){
+		call putdec(lineno)
+		call putc(PERIOD)
+		call putc(BLANK)
+		call putlin(lin)
+		}
+	}
+end
+# addset - put	c  in  set(j)  if it fits,  increment  j
+
+integer function addset(c, set, j, maxsiz)
+implicit none
+integer j, maxsiz
+char c, set(maxsiz)
+
+if (j > maxsiz)
+	addset = NO
+else {
+	set(j) = c
+	j = j + 1
+	addset = YES
+	}
+return
+end
+# amatch  (non-recursive) - look for match starting at lin(from)
+
+integer function amatch(lin, from, pat)
+implicit none
+char lin(INSIZE), pat(MAXPAT)
+integer omatch, patsiz
+integer from, i, j, offset, stack
+
+stack = 0
+offset = from	# next unexamined input character
+for (j = 1; pat(j) != EOS; j = j + patsiz(pat, j))
+	if (pat(j) == CLOSURE) {	# a closure entry
+		stack = j
+		j = j + CLOSIZE # step over CLOSURE
+		for (i = offset; lin(i) != EOS; )	# match as many as
+			if (omatch(lin, i, pat, j) == NO)	# possible
+				break
+		pat(stack+COUNT) = i - offset
+		pat(stack+START) = offset
+		offset = i	# character that made us fail
+		}
+	else if (omatch(lin, offset, pat, j) == NO) {	# non-CLOSURE
+		for ( ; stack > 0; stack = pat(stack+PREVCL))
+			if (pat(stack+COUNT) > 0)
+				break
+		if (stack <= 0) {	# stack is empty
+			amatch = 0	# return failure
+			return
+			}
+		pat(stack+COUNT) = pat(stack+COUNT) - 1
+		j = stack + CLOSIZE
+		offset = pat(stack+START) + pat(stack+COUNT)
+		}
+	# else omatch succeeded
+amatch = offset
+return	# success
+end
+# dodash - expand array(i-1)-array(i+1) into set(j)... from valid
+
+subroutine dodash(valid, array, i, set, j, maxset)
+implicit none
+char esc
+integer addset, indx
+integer i, j, junk, k, limit, maxset
+char array(ARB), set(maxset), valid(ARB)
+
+i = i + 1
+j = j - 1
+limit = indx(valid(1), esc(array, i))
+for (k = indx(valid(1), set(j)); k <= limit; k = k + 1)
+	junk = addset(valid(k), set, j, maxset)
+return
+end
+# error - prints error message and then halts
+
+subroutine error(msg)
+implicit none
+character *(*) msg
+
+write(STDERR,9060)msg
+9060 format(a)
+stop
+end
+# esc - map  array(i)  into escaped character if appropriate
+
+integer function esc(array, i)
+implicit none
+char array(ARB)
+integer i
+
+if (array(i) != ESCAP)
+	esc = array(i)
+else if (array(i+1) == EOS)	# \*a not special at end
+	esc = ESCAP
+else {
+	i = i + 1
+	if (array(i) == LETN)
+		esc = NEWLINE
+	else
+		esc = array(i)
+	}
+return
+end
+# filset - expand set at  array(i)  into  set(j),  stop at  delim
+
+subroutine filset(delim, array, i, set, j, maxset)
+implicit none
+char esc
+integer addset, indx
+integer i, j, junk, maxset
+char array(ARB), delim, set(maxset)
+
+string digits "0123456789"
+string lowalf "abcdefghijklmnopqrstuvwxyz"
+string upalf "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+for ( ; array(i) != delim & array(i) != EOS; i = i + 1)
+	if (array(i) == ESCAP)
+		junk = addset(esc(array, i), set, j, maxset)
+	else if (array(i) != DASH)
+		junk = addset(array(i), set, j, maxset)
+	else if (j <= 1 | array(i+1) == EOS)	# literal -
+		junk = addset(DASH, set, j, maxset)
+	else if(DIG0 <= set(j-1) & set(j-1) <= DIG9)	# contigious numeric
+		call dodash(digits, array, i, set, j, maxset)
+	else if(LETA <= set(j-1) & set(j-1) < LETZ)	# contigious lower alphaP
+		call dodash(lowalf, array, i, set, j, maxset)
+	else if(UPA <= set(j-1) & set(j-1) < UPZ)     # contigious upper alpha
+		call dodash(upalf, array, i, set, j, maxset)
+	else
+		junk = addset(DASH, set, j, maxset)
+return
+end
+# getccl - expand char class at arg(i) into pat(j)
+
+integer function getccl(arg, i, pat, j)
+implicit none
+char arg(MAXARG), pat(MAXPAT)
+integer addset
+integer i, j, jstart, junk
+
+i = i + 1	# skip over {
+if (arg(i) == INV) {
+	junk = addset(NCCL, pat, j, MAXPAT)
+	i = i + 1
+	}
+else
+	junk = addset(CCL, pat, j, MAXPAT)
+jstart = j
+junk = addset(0, pat, j, MAXPAT)	# leave room for COUNT
+call filset(CCLEND, arg, i, pat, j, MAXPAT)
+pat(jstart) = j - jstart - 1
+if (arg(i) == CCLEND)
+	getccl = OK
+else
+	getccl = ERR
+return
+end
+# getlin - gets an input line
+
+integer function getlin(buf,fileno)
+implicit none
+integer fileno
+char buf(ARB)
+integer i,len
+
+read(fileno,9050,end=1000)len,(buf(i),i=1,len)
+9050 format(q,MAXLINE a1)
+buf(len+1)=NEWLINE
+buf(len+2)=EOS
+getlin=YES
+return
+
+1000 getlin=EOF
+return
+end
+# getpat - convert argument into pattern
+
+integer function getpat(arg, pat)
+implicit none
+integer arg(MAXARG), pat(MAXPAT)
+integer makpat
+
+getpat = makpat(arg, 1, EOS, pat)
+return
+end
+# getarg - gets pattern argument for find
+
+subroutine getarg(arg)
+implicit none
+char arg(MAXARG)
+integer i
+integer getlin
+
+if(getlin(arg, STDIN) == EOF)
+	stop
+for(i=1; i <= MAXARG & arg(i) != NEWLINE & arg(i) != EOS; i=i+1)
+	;
+if(i >= MAXARG)
+	i=MAXARG
+arg(i)=EOS
+return
+end
+# indx - returns position of character in string
+
+integer function indx(str,c)
+implicit none
+char str(ARB),c
+
+for(indx = 1; str(indx) != EOS; indx = indx+1)
+	if(c == str(indx))
+		return
+indx = 0
+return
+end
+# itoa - convert int to char string in str
+
+integer function itoa(int,str,size)
+implicit none
+integer iabs,mod
+integer d,i,int,intval,j,size
+char k,str(size)
+
+string digits "0123456789"
+
+intval=iabs(int)
+str(1)=EOS
+i=1
+repeat{
+	i=i+1
+	d=mod(intval,10)
+	str(i)=digits(d+1)
+	intval=intval/10
+	}until(intval == 0 | i >= size)
+if(int<0 & i < size){	# then sign
+	i=i+1
+	str(i)=MINUS
+	}
+itoa=i-1
+for(j=1; j<i; j=j+1){	# then reverse
+	k=str(i)
+	str(i)=str(j)
+	str(j)=k
+	i=i-1
+	}
+return
+end
+# locate - look for c in char class at pat(offset)
+
+integer function locate(c, pat, offset)
+implicit none
+char c, pat(MAXPAT)
+integer i, offset
+# size of class is at pat(offset), characters follow
+
+for (i = offset + pat(offset); i > offset; i = i - 1)
+	if (c == pat(i)) {
+		locate = YES
+		return
+		}
+locate = NO
+return
+end
+# makpat - make pattern from arg(from), terminate at delim
+
+integer function makpat(arg, from, delim, pat)
+implicit none
+char esc
+char arg(MAXARG), delim, pat(MAXPAT)
+integer addset, getccl, stclos, stkcl
+integer from, i, j, junk, lastcl, lastj, lj
+
+j = 1	# pat index
+lastj = 1
+lastcl = 0
+for (i = from; arg(i) != delim & arg(i) != EOS; i = i + 1) {
+	lj = j
+	if (arg(i) == ANY)
+		junk = addset(ANY, pat, j, MAXPAT)
+	else if (arg(i) == BOL & i == from)
+		junk = addset(BOL, pat, j, MAXPAT)
+	else if (arg(i) == EOL & arg(i + 1) == delim)
+		junk = addset(EOL, pat, j, MAXPAT)
+	else if (arg(i) == CCL) {
+		if (getccl(arg, i, pat, j) == ERR)
+			break
+		}
+	else if (arg(i) == CLOSURE & i > from) {
+		lj = lastj
+		if (pat(lj)==BOL | pat(lj)==EOL | pat(lj)==CLOSURE)
+			break
+		lastcl = stclos(pat, j, lastj, lastcl)
+		}
+	else if (arg(i) == KLEENE & i > from) {
+		lj = lastj
+		if (pat(lj)==BOL | pat(lj)==EOL | pat(lj)==CLOSURE)
+			break
+		lastcl = stkcl(pat, j, lastj, lastcl)
+		}
+	else {
+		junk = addset(CHARAC, pat, j, MAXPAT)
+		junk = addset(esc(arg, i), pat, j, MAXPAT)
+		}
+	lastj = lj
+	}
+if (arg(i) != delim)	# terminated early
+	makpat = ERR
+else if (addset(EOS, pat, j, MAXPAT) == NO)	# no room
+	makpat = ERR
+else
+	makpat = i
+return
+end
+# match - find match anywhere on line
+
+integer function match(lin, pat)
+implicit none
+char lin(INSIZE), pat(MAXPAT)
+integer amatch
+integer i
+
+for (i = 1; lin(i) != EOS; i = i + 1)
+	if (amatch(lin, i, pat) > 0) {
+		match = YES
+		return
+		}
+match = NO
+return
+end
+# omatch - try to match a single pattern at pat(j)
+
+integer function omatch(lin, i, pat, j)
+implicit none
+char lin(INSIZE), pat(MAXPAT)
+integer locate
+integer bump, i, j
+
+omatch = NO
+if (lin(i) == EOS)
+	return
+bump = -1
+if (pat(j) == CHARAC) {
+	if (lin(i) == pat(j + 1))
+		bump = 1
+	}
+else if (pat(j) == BOL) {
+	if (i == 1)
+		bump = 0
+	}
+else if (pat(j) == ANY) {
+	if (lin(i) != NEWLINE)
+		bump = 1
+	}
+else if (pat(j) == EOL) {
+	if (lin(i) == NEWLINE)
+		bump = 0
+	}
+else if (pat(j) == CCL) {
+	if (locate(lin(i), pat, j + 1) == YES)
+		bump = 1
+	}
+else if (pat(j) == NCCL) {
+	if (lin(i) != NEWLINE & locate(lin(i), pat, j + 1) == NO)
+		bump = 1
+	}
+else
+	call error('In omatch: can''t happen.')
+if (bump >= 0) {
+	i = i + bump
+	omatch = YES
+	}
+return
+end
+# patsiz - returns size of pattern entry at pat(n)
+
+integer function patsiz(pat, n)
+implicit none
+char pat(MAXPAT)
+integer n
+
+if (pat(n) == CHARAC)
+	patsiz = 2
+else if (pat(n) == BOL | pat(n) == EOL | pat(n) == ANY)
+	patsiz = 1
+else if (pat(n) == CCL | pat(n) == NCCL)
+	patsiz = pat(n + 1) + 2
+else if (pat(n) == CLOSURE)	# optional
+	patsiz = CLOSIZE
+else
+	call error('In patsiz: can''t happen.')
+return
+end
+# putc - puts char on output unit
+
+subroutine putc(c)
+implicit none
+char c,buf(OUTSIZE)
+integer i,lastc
+
+data lastc/0/
+
+if(lastc >= OUTSIZE | c == NEWLINE){
+	if(lastc > 0)
+		write(STDOUT,9060)(buf(i),i=1,lastc)
+	else
+		write(STDOUT,9060)
+	9060 format(1x,OUTSIZE a1)
+	lastc=0
+	}
+if(c != NEWLINE){
+	lastc=lastc+1
+	buf(lastc)=c
+	}
+return
+end
+# putdec - output decimal integer
+
+subroutine putdec(n)
+implicit none
+char chars(MAXCHARS)
+integer itoa
+integer i,n,nd
+
+nd=itoa(n,chars,MAXCHARS)
+for(i=1; i <= nd; i=i+1)
+	call putc(chars(i))
+return
+end
+# putlin - puts a line on output file
+
+subroutine putlin(in)
+implicit none
+char in(ARB)
+integer i
+
+for(i=1; in(i) != NEWLINE & in(i) != EOS; i=i+1)
+	call putc(in(i))
+call putc(NEWLINE)
+return
+end
+# stclos - insert CLOSURE entry at pat(j)
+
+integer function stclos(pat, j, lastj, lastcl)
+implicit none
+char pat(MAXPAT)
+integer addset
+integer j, jp, jt, junk, lastcl, lastj
+
+for (jp = j - 1; jp >= lastj; jp = jp - 1) {	# make a hole
+	jt = jp + CLOSIZE
+	junk = addset(pat(jp), pat, jt, MAXPAT)
+	}
+j = j + CLOSIZE
+stclos = lastj
+junk = addset(CLOSURE, pat, lastj, MAXPAT)	# put closure in it
+junk = addset(0, pat, lastj, MAXPAT)	# COUNT
+junk = addset(lastcl, pat, lastj, MAXPAT)	# PREVCL
+junk = addset(0, pat, lastj, MAXPAT)	# START
+return
+end
+# stkcl - insert KLEENE CLOSURE entry at pat(j)
+
+integer function stkcl(pat, j, lastj, lastcl)
+implicit none
+char pat(MAXPAT)
+integer addset
+integer j, junk, lastcl, lastj
+
+stkcl=j
+junk = addset(CLOSURE, pat, j, MAXPAT)	# put closure in it
+junk = addset(0, pat, j, MAXPAT)	# COUNT
+junk = addset(lastcl, pat, j, MAXPAT)	# PREVCL
+junk = addset(0, pat, j, MAXPAT)	# START
+for(; lastj < stkcl; lastj=lastj+1)
+	junk=addset(pat(lastj),pat,j,MAXPAT)
+lastj=lastj+CLOSIZE
+return
+end

@@ -1,0 +1,271 @@
+#-h-  xref                       9439  local   12/24/80  15:54:47
+#-h-  xref                       1524  local   12/24/80  15:30:41
+# xref - make cross reference list of named files
+
+ # include ratdef
+
+# layout of tree nodes
+define(LLINK,0)   # pointer to left subtree
+define(RLINK,1)   # pointer to right subtree
+define(LNLIST,2)  # pointer to list of references
+define(LAST,3)    # pointer to last reference entered
+define(ENTRY,4)   # name (string)
+define(TNODESIZE,5)# size of node = TNODESIZE + length(name) + 1
+
+# layout of linked list nodes
+define(LINENUM,0) # line number
+define(LINK,1)    # pointer to next line number
+define(LNODESIZE,2)
+
+define(MAXBUF,15000)
+define(LINESIZE,80) # length of output lines (see pentry)
+define(MAXTOK,15) # maximum token size (see pentry)
+define(MAXNUM,5)  # size of line number entry (see pentry)
+
+DRIVER(xref)
+
+   character name(MAXTOK), arg(MAXNAME)
+   integer fd, fflag, nfiles
+   integer open, getarg
+   data fflag/NO/, nfiles/0/
+
+   call query ("usage:  xref [-f] [files].")
+   for (i = 1; getarg(i, arg, MAXNAME) ^= EOF; i = i + 1)
+      if (arg(1) == MINUS & (arg(2) == LETF | arg(2) == BIGF))
+         fflag = YES
+      else if (arg(1) == MINUS & arg(2) ^= EOS)
+         call error ("usage:  xref [-f] [files].")
+      else {
+         if (arg(1) == MINUS)
+            fd = STDIN
+         else
+            fd = open(arg, READ)
+         if (fd == ERR)
+            call cant(arg)
+         call putlin(arg, STDOUT)
+         call putc(COLON)
+         call putc(NEWLINE)
+         call doxref(fd, fflag)
+         nfiles = nfiles + 1
+         }
+   if (nfiles == 0)
+      call doxref(STDIN, fflag)
+   DRETURN
+   end
+#-t-  xref                       1524  local   12/24/80  15:30:41
+#-h-  balloc                      236  local   12/24/80  15:30:42
+# balloc - allocate n words in storage array buf; return index
+   integer function balloc(n)
+   integer n
+   include "cxref.i"
+
+   nextbf = nextbf + n
+   if (nextbf > MAXBUF)
+      call error("out of storage.")
+   return(nextbf - n)
+   end
+#-t-  balloc                      236  local   12/24/80  15:30:42
+#-h-  doxref                      567  local   12/24/80  15:30:43
+# doxref-generate cross reference list for file fd; fold if fflag = YES
+   subroutine doxref(fd, fflag)
+   integer fd, fflag
+   integer t, root
+   character gettok
+   character token(MAXTOK)
+   include "cxref.i"
+
+   root = 0
+   nextbf = 1
+   lineno = 1
+   repeat {
+      t = gettok(token, MAXTOK, fd)
+      if (t == EOF)
+         break
+      if (t == LETTER) {
+         if (fflag == YES)
+            call fold(token)
+         call instl(token, lineno, root)
+         }
+      else if (t == NEWLINE)
+         lineno = lineno + 1
+      }
+   call tprint(root)
+   return
+   end
+#-t-  doxref                      567  local   12/24/80  15:30:43
+#-h-  gettok                     1006  local   12/24/80  15:30:43
+# gettok - get text token from file fd
+   character function gettok(token, size, fd)
+   character token(ARB)
+   integer size, fd
+   character getch, type
+   integer i
+   character c, peek
+   data peek /0/
+
+   if (peek == 0)    # check for lookahead
+      c = getch(c, fd)
+   else {
+      c = peek
+      peek = 0
+      }
+   for (; c ^= EOF; c = getch(c, fd)) {
+      gettok = type(c)
+      if (gettok == LETTER) {   # start of name
+         token(1) = c
+         for (i = 2; getch(c, fd) ^= EOF; i = i + 1)
+            if (type(c) == LETTER | type(c) == DIGIT) {
+               if (i < size)
+                  token(i) = c
+               }
+            else
+               break
+         peek = c   # went one too far
+         if (i <= size)
+            token(i) = EOS
+         else
+            token(size) = EOS
+         return(LETTER)
+         }
+      else if (gettok == NEWLINE) {  # newline must be returned
+         peek = 0
+         return(NEWLINE)
+         }
+      }
+   peek = 0
+   return(EOF)
+   end
+#-t-  gettok                     1006  local   12/24/80  15:30:43
+#-h-  icopys                      325  local   12/24/80  15:30:44
+ ## icopys - copy integer string at from(i) to char string at to(j)
+    subroutine icopys(from, i, to, j)
+    integer from(ARB)
+    character to(ARB)
+    integer i, j, k1, k2
+
+    k2 = j
+    for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+       to(k2) = from(k1)
+       k2 = k2 + 1
+       }
+    to(k2) = EOS
+    return
+    end
+#-t-  icopys                      325  local   12/24/80  15:30:44
+#-h-  instl                      1076  local   12/24/80  15:30:44
+# instl - install name in tree with reference on lineno; update tree
+   subroutine instl(name, lineno, tree)
+   character name(ARB), temp(MAXNAME)
+   integer lineno, tree
+   integer cond, p, q
+   integer balloc, strcmp, length
+   include "cxref.i"
+
+   p = tree
+   for (q = 0; p ^= 0; p = buf(q)) {
+      call icopys (buf, p+ENTRY, temp, 1)  #convert from int to char
+      cond = strcmp(name, temp)
+      if (cond == 0) {
+         q = balloc(LNODESIZE)   # add a new element onto list
+         buf(q+LINENUM) = lineno
+         buf(q+LINK) = 0
+         buf(buf(p+LAST)+LINK) = q
+         buf(p+LAST) = q
+         return
+         }
+      else if (cond < 0)
+         q = p + LLINK
+      else
+         q = p + RLINK
+      }
+   p = balloc(TNODESIZE+length(name)+1) # allocate and fill in new node
+   buf(p+LLINK) = 0
+   buf(p+RLINK) = 0
+   call scopyi(name, 1, buf, p+ENTRY)
+   if (q == 0)
+      tree = p
+   else
+      buf(q) = p
+   q = balloc(LNODESIZE)   # insert first reference
+   buf(q+LINENUM) = lineno
+   buf(q+LINK) = 0
+   buf(p+LNLIST) = q
+   buf(p+LAST) = q
+   return
+   end
+#-t-  instl                      1076  local   12/24/80  15:30:44
+#-h-  pentry                      558  local   12/24/80  15:30:45
+# pentry - print name and list of references
+   subroutine pentry(name, list)
+   character name(ARB)
+   integer list
+   integer i, len
+   include "cxref.i"
+
+   call putstr(name, -MAXTOK - 1, STDOUT)
+   len = MAXTOK + 1
+   for (i = list; i ^= 0; i = buf(i+LINK)) {
+      if (len > LINESIZE - MAXNUM) {
+         call putc(NEWLINE)
+         call putstr(EOS, -MAXTOK - 1, STDOUT)
+         len = MAXTOK + 1
+         }
+      call putint(buf(i+LINENUM), MAXNUM, STDOUT)
+      len = len + MAXNUM
+      }
+   if (len <= LINESIZE)
+      call putc(NEWLINE)
+   return
+   end
+#-t-  pentry                      558  local   12/24/80  15:30:45
+#-h-  scopyi                      322  local   12/24/80  15:30:45
+ ## scopyi - copy char string at from(i) to integer string to(j)
+    subroutine scopyi(from, i, to, j)
+    character from(ARB)
+    integer to(ARB)
+    integer i, j, k1, k2
+
+    k2 = j
+    for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+       to(k2) = from(k1)
+       k2 = k2 + 1
+       }
+    to(k2) = EOS
+    return
+    end
+#-t-  scopyi                      322  local   12/24/80  15:30:45
+#-h-  tprint                      707  local   12/24/80  15:30:45
+# tprint - destructively print tree, left subtree first
+   subroutine tprint(tree)
+   integer tree
+   integer p, q, sp
+   character temp(MAXNAME)
+   include "cxref.i"
+
+   sp = 0
+   p = tree
+   repeat {
+      while (p ^= 0)
+         if (buf(p+LLINK) ^= 0) {
+            q = buf(p+LLINK)
+            buf(p+LLINK) = sp
+            sp = p
+            p = q
+            }
+         else {
+            call icopys (buf, p+ENTRY, temp, 1)
+            call pentry(temp, buf(p+LNLIST))
+            p = buf(p+RLINK)
+            }
+      if (sp == 0)
+         return
+      call icopys (buf, sp+ENTRY, temp, 1)
+      call pentry(temp, buf(sp+LNLIST))
+      p = buf(sp+RLINK)
+      sp = buf(sp+LLINK)
+      }
+   return
+   end
+#-t-  tprint                      707  local   12/24/80  15:30:45
+#-t-  xref.r                     7510  local   12/24/80  15:47:58
+#-t-  xref                       9439  local   12/24/80  15:54:47

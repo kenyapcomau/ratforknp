@@ -1,0 +1,185 @@
+.pl 61
+.rm 70
+.sp 10
+.ce
+Software Tools Programmer's Manual
+.sp 5
+.ce
+ABSTRACT
+.sp
+This report describes the software tools and associated
+utility routines originally developed by Brian Kernighan
+and P. J. Plauger in their book
+.ul
+Software Tools
+and enhanced by members of the Software Tools Users Group.
+.sp 4
+.ce
+January 1981
+.sp 10
+.ce 9
+Documentation and tools assembled and
+prepared for distribution by:
+
+Deborah K. Scherrer
+Advanced Systems Research Group
+Computer Science and Applied Mathematics Department
+Lawrence Berkeley Laboratory
+Berkeley, CA  94720
+.sp 3
+LBID 097
+.bp 1
+.fo ''-#-''
+.ce
+Software Tools Programmers Manual
+.sp 2
+.ce
+INTRODUCTION
+.sp
+This manual describes those utilities and programming aids which
+are descendants of the tools developed in
+.ul
+Software Tools
+by Brian Kernighan and P. J. Plauger.
+The tools described here have been
+considerably enhanced
+and many new ones added.
+.sp
+One of the many problems which programmers (and
+end users) encounter in their
+everyday use of computers is
+the lack of common utilities as they move
+from system to system.
+The software which was presented in
+.ul
+Software Tools
+represents a first step towards a solution
+to this problem.
+Suddenly, a common editor, text formatter, sorter, and
+other program development tools were available in a "portable"
+language.  This
+portability was achieved via two mechanisms:
+.sp
+.in +5
+.ti -3
+1. All source was written in ratfor, a fortran preprocessor language
+which is directly translatable into Fortran.
+.ti -3
+2. Most system dependent quantities were pushed down into primitive
+function calls, which are left up to the person in charge of
+bringing up the
+utilities to implement.
+.sp
+.in -5
+These two mechanisms, together with certain conventions concerning data
+types, have permitted more than 300 different sites
+to implement these tools
+to varying degrees of sophistication.
+In fact, if the portable command line interpreter (shell) is
+implemented, this software can essentially define
+a portable "virtual operating system",
+achieving inter-system uniformity at all three levels of
+user interface - virtual machine (the primitives),
+utilities, and command language.
+.sp 2
+The manual is divided into four sections:
+.sp
+.in +5
+1.  Tools
+.br
+2.  Subroutines and Functions
+.br
+3.  Optional Tools and System-dependent Information
+.br
+4.  Primers
+.sp
+.in -5
+.sp
+Section 1 describes the tools or programs which are usually
+invoked directly by the
+user from the current command interpreter (or shell).  The utilities
+may also be invoked through the use of the
+"spawn"
+function call (if implemented).
+.sp
+Section 2 describes the
+subroutines and functions which are intended to be called by
+user programs.
+Included in this section are a number of generally useful
+system-independent routines
+which perform commonly encountered programming tasks.
+Also included are the I/O primitives, which are
+implemented specifically for each site when the tools package
+is brought up.
+These are primarily concerned with I/O and process control.
+.sp
+Section 3 contains descriptions of additional tools
+not available on every system.
+It also contains various system-dependent information such
+as methods for invoking the software tools.
+.sp
+Section 4 contains primers,
+or detailed help documents for some of the tools.
+.sp
+All entries are based on a common format,
+which includes at least some of the following subsections:
+.sp
+.in +5
+The NAME section repeats the tool or routine name
+and gives a very short description
+of its purpose.
+.sp
+The SYNOPSIS section gives the form of the command line necessary
+to invoke the tool,
+or the form of the call to the subroutine or function.
+.sp
+The DESCRIPTION section discusses the current entry in detail.
+.sp
+An IMPLEMENTATION section is included in the writeups for all
+primitives and describes possible strategies for implementation.
+.sp
+The FILES section describes any scratch or data files (other than
+indicated by the arguments) which might be used by the tool.
+.sp
+The SEE ALSO section gives the names of other entries or
+additional documentation that is related to the current entry.
+.sp
+The DIAGNOSTICS section lists error messages or error conditions
+that might result.
+Messages which may come from the host operating system are
+not covered.
+.sp
+The BUGS/DEFICIENCIES section describes known bugs and
+lists possible deficiencies.
+.sp
+.in -5
+.ul
+Acknowledgements.
+.br
+As mentioned above, much of the software described in this manual
+originated in
+.ul
+Software Tools.
+The tools were assembled and prepared for distribution by
+Debbie Scherrer of Lawrence Berkeley Laboratory with considerable
+assistance from Allen Akin of the Georgia Institute of Technology.
+Enhancements to the original tools, and well as many new tools, have
+been submitted to the Software Tools Users Group by the
+following organizations:
+.nf
+.ne 7
+.sp
+.ul
+University of Arizona   Lawrence Berkelely Laboratory   Georgia Tech.
+.sp
+David Hanson            Joe Sventek                     Allen Akin
+Cary Coutant            Debbie Scherrer                 Dan Forsyth
+Chris Fraser            Dennis Hall                     Perry Flinn
+Peter Downey
+Steve Wampler
+.sp 2
+.ul
+Stanford University     Johns Hopkins University
+.sp
+Philip Scherrer         Mars Gralia
+.fi

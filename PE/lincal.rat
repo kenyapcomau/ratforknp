@@ -1,0 +1,105 @@
+define(STDIN,5)
+define(STDOUT,6)
+
+# cal - prints calendar(s) for desired year
+
+implicit none
+integer year,copies
+
+call carcon(STDOUT,1)
+repeat{
+	read(STDIN,500,end=999)year,copies
+	500 format(i4,i2)
+	if(copies <= 0)
+		break
+	if(year < 0)
+		next
+	for(; copies > 0; copies=copies-1)
+		call docal(year)
+	}
+999 end
+
+# docal - print calendar for year
+
+subroutine docal(year)
+implicit none
+integer year
+integer daywk,mlen
+integer month,day,i,j
+character*10 mname(12)
+character*126 line
+
+data mname/'January','Februrary','March','April','May',
+	'June','July','August','September','October',
+	'November','December'/
+
+write(STDOUT,600)year
+600 format('1',//,x,62x,i4,///)
+write(STDOUT,601)
+601 format(11x,5(' Su Mo Tu We Th Fr Sa'),' Su Mo'/)
+do month=1,12{
+	line=' '
+	j=daywk(year,month)*3+1
+	do day=1,mlen(year,month){
+		write(line(j:j+1),'(i2)')day
+		j=j+3
+		}
+	write(STDOUT,602)mname(month),line(1:j-1)
+	602 format(x,a,x,a/)
+	}
+write(STDOUT,601)
+return
+end
+
+# mlen - returns length of month
+
+integer function mlen(year,month)
+implicit none
+integer year,month
+logical leapyr
+integer msize(12)
+
+data msize/31,28,31,30,31,30,31,31,30,31,30,31/
+
+if(month < 1 | month > 12){
+	mlen=0
+	return
+	}
+mlen=msize(month)
+if(leapyr(year) & month == 2)
+	mlen=29
+return
+end
+
+# leapyr - returns true if year is leap
+
+logical function leapyr(year)
+implicit none
+integer year
+
+leapyr=(mod(year,4) == 0 & mod(year,100) != 0) | mod(year,400) == 0
+return
+end
+
+# daywk - returns day of week of first day of month
+
+integer function daywk(year,month)
+implicit none
+logical leapyr
+integer year,month
+integer y
+integer mnum(12)
+
+data mnum/0,31,59,90,120,151,181,212,243,273,304,334/
+
+if(month < 1 | month > 12){
+	daywk=0
+	return
+	}
+y=year - 1
+daywk=y + y / 4 - y / 100 + y / 400 + mnum(month) + 1
+if(leapyr(year) & month >= 3)
+	daywk=daywk + 1
+daywk=mod(daywk,7)
+return
+end

@@ -1,0 +1,121 @@
+#-h-  comm.r                     3413  local   12/15/80  11:39:51
+#-h-  comm                       1217  local   12/15/80  11:39:38
+ #----------------------------------------------------------------
+ # comm - print lines common to two files
+
+ # include standard definitions
+ # include ratdef
+ #------------------------------------------------------------
+
+define(LEADERING,15)
+
+ DRIVER(comm)
+
+   character buf(MAXLINE)
+   integer getarg, open, index
+   integer i, file(2), j, one, two, three
+   external index
+
+   one = YES    # default is all columns
+   two = YES
+   three = YES
+   j = 0
+   call query ("usage:  comm [-123] file1 file2.")
+   for (i = 1; getarg(i, buf, MAXLINE) ^= EOF; i = i + 1) {
+      if (j == 2)
+         break
+      if (buf(1) == MINUS & buf(2) ^= EOS) {
+         if (index(buf, DIG1) == 0)
+            one = NO
+         if (index(buf, DIG2) == 0)
+            two = NO
+         if (index(buf, DIG3) == 0)
+            three = NO
+         }
+      else if (buf(1) == MINUS) {
+         j = j + 1
+         file(j) = STDIN
+         }
+      else {
+         j = j + 1
+         file(j) = open(buf,READ)
+         if (file(j) == ERR)
+            call cant(buf)
+         }
+      }
+   if (j == 0)
+      call error ("usage:  comm [-123] file1 file2.")
+   if (j == 1)
+      file(2) = STDIN
+   call common(file(1), file(2), one, two, three)
+    DRETURN
+   end
+#-t-  comm                       1217  local   12/15/80  11:39:38
+#-h-  coln                        334  local   12/15/80  11:39:38
+# coln - print lin with leadering ldr if flag = YES; rm leading blanks
+   subroutine coln(lin, ldr, flag)
+   character lin(ARB)
+   integer ldr, flag
+   integer i
+
+   if (flag == NO)
+      return
+   for (i = 1; i <= ldr; i = i + 1)
+      call putc(BLANK)
+   i = 1
+   call skipbl(lin, i)
+   call putlin(lin(i), STDOUT)
+   return
+   end
+#-t-  coln                        334  local   12/15/80  11:39:38
+#-h-  common                     1466  local   12/15/80  11:39:38
+# common - print lines common to file1 & file2 according to flags 1..3
+   subroutine common(file1, file2, one, two, three)
+   integer file1, file2, one, two, three
+   integer k, stat1, stat2, ldr1, ldr2, ldr3
+   character buf1(MAXLINE), buf2(MAXLINE)
+   integer getlin, strcmp
+
+   ldr1 = 0     # compute leadering
+   ldr2 = 0
+   ldr3 = 0
+   if (one == YES) {
+      ldr2 = LEADERING
+      ldr3 = LEADERING
+      }
+   if (two == YES)
+      ldr3 = ldr3 + LEADERING
+   stat1 = getlin(buf1,file1)
+   stat2 = getlin(buf2,file2)
+   repeat {
+      if (stat1 == EOF | stat2 == EOF)
+          break
+      k = strcmp(buf1, buf2)     # compare lines
+      if (k < 0) {               # line only in file1
+         call coln(buf1, ldr1, one)
+         stat1 = getlin(buf1, file1)
+         }
+      else if (k > 0) {          # line only in file2
+         call coln(buf2, ldr2, two)
+         stat2 = getlin(buf2, file2)
+         }
+      else {                     # line in both files
+         call coln(buf1, ldr3, three)
+         stat1 = getlin(buf1, file1)
+         stat2 = getlin(buf2, file2)
+         }
+      }
+   if (stat1 == EOF)      # end of file1, print rest of file2
+      while (stat2 ^= EOF) {
+         call coln(buf2, ldr2, two)
+         stat2 = getlin(buf2, file2)
+         }
+   else if (stat2 == EOF) # end of file2, print rest of file1
+      while (stat1 ^= EOF) {
+         call coln(buf1, ldr1, one)
+         stat1 = getlin(buf1, file1)
+         }
+   return
+   end
+#-t-  common                     1466  local   12/15/80  11:39:38
+#-t-  comm.r                     3413  local   12/15/80  11:39:51

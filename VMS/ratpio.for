@@ -1,0 +1,74 @@
+C
+C GETCH - GET CHARACTERS FROM FILE
+C
+       INTEGER FUNCTION GETCH(C, F)
+       INTEGER C
+       BYTE BUF(81)
+       INTEGER F, I, LASTC, LEN
+       DATA LASTC /81/, BUF(81) /10/
+C
+C                      10 IS THE NEWLINE CHARACTER
+       IF(.NOT.(BUF(LASTC) .EQ. 10 .OR. LASTC .GE. 81))   GOTO 23114
+C                  CHANGE THE UNIT NUMBER IF NECESSARY
+       READ(5, 1, END=10) LEN, (BUF(I), I=1, LEN)
+1      FORMAT(Q, 80 A1)
+23118  CONTINUE
+C                 10 IS NEWLINE
+       BUF(LEN+1) = 10
+       LASTC = 0
+23114  CONTINUE
+       LASTC = LASTC + 1
+       C = ZEXT(BUF(LASTC))
+       GETCH = C
+       RETURN
+C          10003 IS END-OF-FILE MARKER
+10     C = 10003
+       GETCH = 10003
+       RETURN
+       END
+C
+C PUTCH (INTERIM VERSION)  PUT CHARACTERS
+C
+       SUBROUTINE PUTCH(C, F)
+       INTEGER C
+       BYTE BUF(81)
+       INTEGER F, I, LASTC
+       DATA LASTC /0/
+C
+C                        10 IS THE NEWLINE CHARACTER
+       IF(.NOT.(LASTC .GE. 81 .OR. C .EQ. 10))   GOTO 23342
+       IF(.NOT.( LASTC .LE. 0 ))  GOTO 23344
+C                 IF NECESSARY, CHANGE THE UNIT NUMBER IS THE
+C                 2 WRITE STATEMENTS IN THIS ROUTINE AND THE
+C                 1 IN REMARK
+       WRITE(6,2)
+2      FORMAT(/)
+       GOTO 23345
+23344  CONTINUE
+       WRITE(6, 1) (BUF(I), I = 1, LASTC)
+1      FORMAT(80 A1)
+23345  CONTINUE
+       LASTC = 0
+23342  CONTINUE
+C                      10 IS NEWLINE
+       IF(.NOT.(C .NE. 10)) GOTO 23346
+       LASTC = LASTC + 1
+       BUF(LASTC) = C
+23346  CONTINUE
+       RETURN
+       END
+C
+C REMARK - INTERIM VERSION
+C
+       SUBROUTINE REMARK(BUF)
+       BYTE BUF(100)
+       INTEGER I, L
+C                 YOU MIGHT HAVE THE CHANGE THE UNIT NUMBER
+       L = 0
+1      IF(BUF(L+1) .EQ. 0) GOTO 2
+       L = L + 1
+       GOTO 1
+2      WRITE(6, 10) (BUF(I), I = 1, L)
+10     FORMAT(40A1)
+       RETURN
+       END

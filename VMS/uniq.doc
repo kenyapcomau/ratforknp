@@ -1,0 +1,59 @@
+.bp 1
+.in 0
+.he 'UNIQ (1)'1/11/79'UNIQ (1)'
+.fo ''-#-'
+.fi
+NAME
+.br
+.in 7
+uniq - strip adjacent repeated lines from a file
+.sp 1
+.in
+SYNOPSIS
+.br
+.in 7
+uniq [-c] [file ...]
+.sp 1
+.in
+DESCRIPTION
+.br
+.in 7
+Uniq
+reads the input file(s), comparing adjacent lines.
+Second and succeeding copies of repeated lines are removed; the
+remainder is written to standard output.
+
+If the '-c' flag is given,
+each line is preceded by a count of the number of occurrences of
+that line.
+.sp 1
+.in
+FILES
+.br
+.in 7
+.sp 1
+.in
+SEE ALSO
+.br
+.in 7
+The tool 'comm'; the Unix command 'uniq'
+.sp 1
+.in
+DIAGNOSTICS
+.br
+.in 7
+A message is printed if an input file cannot be opened and
+processing is terminated.
+.sp 1
+.in
+AUTHORS
+.br
+.in 7
+.sp 1
+Originally from Kernighan and Plauger's 'Software Tools', with
+modifications by Debbie Scherrer (Lawrence Berkeley Laboratory)
+.sp 1
+.in
+BUGS
+.br
+.in 7

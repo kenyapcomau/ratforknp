@@ -1,0 +1,862 @@
+#-h-  edin.r                    23884  local   12/01/80  16:29:26
+#-h-  edit                       1899  local   12/01/80  16:25:59
+  ## ed - driver subroutine for editor
+
+
+
+ # definitions for in-core editor
+  define(MAXBUF,16384)         #size of buffer array
+  define(MAXTXT,100000)        #size of text buffer
+  define(DITTO,(-3))
+  define(GLOBAL,LETG)
+  define(PRINT,LETP)
+  define(MARKED,LETY)
+  define(NOMARK,LETN)
+  define(FORWARD,0)
+  define(BACKWARD,-1)
+  define(EXCLUDE,LETX)
+  define(APPENDCOM,LETA)
+  define(CHANGE,LETC)
+  define(DELCOM,LETD)
+  define(ENTER,LETE)
+  define(PRINTFIL,LETF)
+  define(READCOM,LETR)
+  define(WRITECOM,LETW)
+  define(INSERT,LETI)
+  define(PRINTCUR,EQUALS)
+  define(MOVECOM,LETM)
+  define(QUIT,LETQ)
+  define(SUBSTITUTE,LETS)
+  define(CURLINE,PERIOD)
+  define(LASTLINE,DOLLAR)
+  define(SCAN,SLASH)
+  define(BACKSCAN,BACKSLASH)
+  define(NOSTATUS,1)
+  define(LINE0,1)
+  define(PREV,0)
+  define(NEXT,1)
+  define(MARK,2)
+  define(TEXT,3)
+
+
+
+ DRIVER(ed)
+   character lin(MAXLINE)
+   integer ckglob, docmd, doglob, doread, getarg, getlin, getlst
+   integer i, status, cursav
+   include "cfile.i"
+   include "clines.i"
+   include "cpat.i"
+
+   # Initialize variables and buffers
+   call setbuf
+   pat(1) = EOS
+   savfil(1) = EOS
+
+   call query ("usage:  edin file.")
+   if (getarg(1, savfil, MAXLINE) != EOF)
+        {
+         if (doread (0, savfil, ENTER) == ERR)
+                call remark ('?.')
+         }
+   while(getlin(lin, STDIN) != EOF)
+        {
+            i = 1
+            cursav = curln
+            if (getlst(lin, i, status) == OK) {
+               if (ckglob(lin, i, status) == OK)
+                  status = doglob(lin, i, cursav, status)
+               else if (status != ERR)
+                  status = docmd(lin, i, NO, status)
+         # else error, do nothing
+            }
+      if (status == ERR) {
+         call remark('?.')
+         curln = cursav
+         }
+      else if (status == EOF)
+            break
+      # else OK, loop
+      }
+ call clrbuf
+  DRETURN
+   end
+#-t-  edit                       1899  local   12/01/80  16:25:59
+#-h-  append                      525  local   12/01/80  16:25:59
+  ## append - append lines after 'line'
+   integer function append(line, glob)
+   character lin(MAXLINE)
+   integer getlin, inject
+   integer line, glob
+   include "clines.i"
+
+   if (glob == YES)
+      append = ERR
+   else {
+      curln = line
+      for (append = NOSTATUS; append == NOSTATUS; )
+         if (getlin(lin, STDIN) == EOF)
+            append = EOF
+         else if (lin(1) == PERIOD & lin(2) == NEWLINE)
+            append = OK
+         else if (inject(lin) == ERR)
+            append = ERR
+      }
+   return
+   end
+#-t-  append                      525  local   12/01/80  16:25:59
+#-h-  ckglob                     1071  local   12/01/80  16:25:59
+  ## ckglob - if global prefix, mark lines to be affected
+   integer function ckglob(lin, i, status)
+   character lin(MAXLINE)
+   integer defalt, getind, gettxt, match, nextln, optpat
+   integer gflag, i, k, line, status
+   character clower
+   include "cbuf.i"
+   include "clines.i"
+   include "cpat.i"
+   include "ctxt.i"
+
+   if (clower(lin(i)) != GLOBAL & clower(lin(i)) != EXCLUDE)
+      status = EOF
+   else {
+      if (clower(lin(i)) == GLOBAL)
+         gflag = YES
+      else
+         gflag = NO
+      i = i + 1
+      if (optpat(lin, i) == ERR | defalt(1, lastln, status) == ERR)
+         status = ERR
+      else {
+         i = i + 1
+         for (line = line1; line <= line2; line = line + 1) {
+            k = gettxt(line)
+            if (match(txt, pat) == gflag)
+                buf(k+MARK) = YES
+            else
+                buf(k+MARK) = NO
+            }
+         for (line=nextln(line2); line!=line1; line=nextln(line)) {
+            k = getind(line)
+            buf(k+MARK) = NO
+            }
+         status = OK
+         }
+      }
+   ckglob = status
+   return
+   end
+#-t-  ckglob                     1071  local   12/01/80  16:25:59
+#-h-  ckp                         389  local   12/01/80  16:26:00
+  ## ckp - check for 'p' after command
+   integer function ckp(lin, i, pflag, status)
+   character lin(MAXLINE)
+   integer i, j, pflag, status
+   integer clower
+
+   j = i
+  if (clower(lin(j)) == clower(PRINT))
+      {
+      j = j + 1
+      pflag = YES
+      }
+   else
+      pflag = NO
+   if (lin(j) == NEWLINE)
+      status = OK
+   else
+      status = ERR
+   ckp = status
+   return
+   end
+#-t-  ckp                         389  local   12/01/80  16:26:00
+#-h-  clrbuf                      104  local   12/01/80  16:26:00
+ ## clrbuf (in memory) - initialize for new file
+ subroutine clrbuf
+ return         #nothing to do
+ end
+#-t-  clrbuf                      104  local   12/01/80  16:26:00
+#-h-  defalt                      321  local   12/01/80  16:26:00
+  ## defalt - set defaulted line numbers
+   integer function defalt(def1, def2, status)
+   integer def1, def2, status
+   include "clines.i"
+
+   if (nlines == 0) {
+      line1 = def1
+      line2 = def2
+      }
+   if (line1 > line2 | line1 <= 0)
+      status = ERR
+   else
+      status = OK
+   defalt = status
+   return
+   end
+#-t-  defalt                      321  local   12/01/80  16:26:00
+#-h-  delete                      466  local   12/01/80  16:26:00
+  ## delete - delete lines 'from' through 'to'
+   integer function delete(from, to, status)
+   integer getind, nextln, prevln
+   integer from, k1, k2, status, to, start, stop
+   include "clines.i"
+
+   if (from <= 0)
+      status = ERR
+   else {
+      k1 = getind(prevln(from))
+      k2 = getind(nextln(to))
+      lastln = lastln - (to - from + 1)
+      curln = prevln(from)
+      call relink(k1, k2, k1, k2)
+      status = OK
+      }
+   delete = status
+   return
+   end
+#-t-  delete                      466  local   12/01/80  16:26:00
+#-h-  docmd                      3354  local   12/01/80  16:26:00
+  ## docmd - handle all editor commands except globals
+   integer function docmd(lin, i, glob, status)
+   character file(MAXLINE), lin(MAXLINE), sub(MAXPAT)
+   integer append, delete, doprnt, doread, dowrit, move, subst
+   integer ckp, defalt, getfn, getone, getrhs, nextln, optpat, prevln
+   character clower, comand
+   integer gflag, glob, i, line3, pflag, status
+   include "cfile.i"
+   include "clines.i"
+   include "cpat.i"
+
+   pflag = NO      # may be set by d, m, s
+   status = ERR
+   comand = clower(lin(i))      # make sure comparing with lower case
+   if (comand == APPENDCOM) {
+      if (lin(i + 1) == NEWLINE)
+         status = append(line2, glob)
+      }
+   else if (comand == CHANGE) {
+      if (lin(i + 1) == NEWLINE)
+        andif (defalt(curln, curln, status) == OK)
+        andif (delete(line1, line2, status) == OK)
+         status = append(prevln(line1), glob)
+      }
+   else if (comand == DELCOM) {
+      if (ckp(lin, i + 1, pflag, status) == OK)
+        andif (defalt(curln, curln, status) == OK)
+        andif (delete(line1, line2, status) == OK)
+        andif (nextln(curln) != 0)
+         curln = nextln(curln)
+      }
+   else if (comand == INSERT) {
+      if (lin(i + 1) == NEWLINE)
+         status = append(prevln(line2), glob)
+      }
+   else if (comand == PRINTCUR) {
+      if (ckp(lin, i + 1, pflag, status) == OK) {
+         call putdec(line2, 1)
+         call putc(NEWLINE)
+         }
+      }
+   else if (comand == MOVECOM) {
+      i = i + 1
+      if (getone(lin, i, line3, status) == EOF)
+         status = ERR
+      if (status == OK)
+        andif (ckp(lin, i, pflag, status) == OK)
+        andif (defalt(curln, curln, status) == OK)
+         status = move(line3)
+      }
+   else if (comand == SUBSTITUTE) {
+      i = i + 1
+      if (optpat(lin, i) == OK)
+        andif (getrhs(lin, i, sub, gflag) == OK)
+        andif (ckp(lin, i + 1, pflag, status) == OK)
+        andif (defalt(curln, curln, status) == OK)
+         status = subst(sub, gflag)
+      }
+   else if (comand == ENTER) {
+      if (nlines == 0)
+        andif (getfn(lin, i, file) == OK)
+                {
+                call scopy(file, 1, savfil, 1)
+                call clrbuf
+                call setbuf
+                status = doread(0, file, ENTER)
+                }
+      }
+   else if (comand == PRINTFIL) {
+      if (nlines == 0)
+        andif (getfn(lin, i, file) == OK) {
+         call scopy(file, 1, savfil, 1)
+         call putlin(savfil, STDOUT)
+         call putc(NEWLINE)
+         status = OK
+         }
+      }
+   else if (comand == READCOM) {
+      if (getfn(lin, i, file) == OK)
+         status = doread(line2, file, READCOM)
+      }
+   else if (comand == WRITECOM) {
+      if (getfn(lin, i, file) == OK)
+        andif (defalt(1, lastln, status) == OK)
+         status = dowrit(line1, line2, file)
+      }
+   else if (comand == PRINT) {
+      if (lin(i + 1) == NEWLINE)
+        andif (defalt(curln, curln, status) == OK)
+         status = doprnt(line1, line2)
+      }
+   else if (lin(i) == NEWLINE) {
+      if (nlines == 0)
+         line2 = nextln(curln)
+      status = doprnt(line2, line2)
+      }
+   else if (comand == QUIT) {
+      if (lin(i + 1) == NEWLINE & nlines == 0 & glob == NO)
+         status = EOF
+      }
+   # else status is ERR
+   if (status == OK & pflag == YES)
+      status = doprnt(curln, curln)
+   docmd = status
+   return
+   end
+#-t-  docmd                      3354  local   12/01/80  16:26:00
+#-h-  doglob                      766  local   12/01/80  16:26:01
+  ## doglob - do command at lin(i) on all marked lines
+   integer function doglob (lin, i, cursav, status)
+   character lin(MAXLINE)
+   integer docmd, getind, getlst, nextln
+   integer count, i, istart, k, line, status
+   include "cbuf.i"
+   include "clines.i"
+
+   status = OK
+   count = 0
+   line = line1
+   istart = i
+   repeat {
+      k = getind(line)
+      if (buf(k+MARK) == YES)
+        {
+        buf(k+MARK) = NO
+        curln = line
+         cursav = line
+         i = istart
+         if (getlst(lin, i, status) == OK)
+           andif (docmd(lin, i, YES, status) == OK)
+            count = 0
+         }
+      else {
+         line = nextln(line)
+         count = count + 1
+         }
+      } until (count > lastln | status != OK)
+   doglob = status
+   return
+   end
+#-t-  doglob                      766  local   12/01/80  16:26:01
+#-h-  doprnt                      380  local   12/01/80  16:26:01
+  ## doprnt - print lines 'from' through 'to'
+   integer function doprnt(from, to)
+   integer gettxt
+   integer from, i, j, to
+   include "clines.i"
+   include "ctxt.i"
+
+   if (from <= 0)
+      doprnt = ERR
+   else {
+      for (i = from; i <= to; i = i + 1) {
+         j = gettxt(i)
+         call putlin(txt, STDOUT)
+         }
+      curln = to
+      doprnt = OK
+      }
+   return
+   end
+#-t-  doprnt                      380  local   12/01/80  16:26:01
+#-h-  doread                      630  local   12/01/80  16:26:02
+ ## doread - read "file" after "line"
+  integer function doread(line, file)
+   character file(MAXLINE), lin(MAXLINE)
+   integer getlin, inject, open
+   integer count, fd, line
+   include "clines.i"
+
+   fd = open(file, READ)
+   if (fd == ERR)
+      doread = ERR
+   else
+        {
+        curln = line
+        doread = OK
+        for (count = 0; getlin(lin, fd) != EOF; count = count + 1)
+                {
+                doread = inject(lin)
+                if (doread == ERR)
+                        break
+                }
+      call close(fd)
+          call putdec (count, 1)
+          call putc (NEWLINE)
+      }
+   return
+   end
+#-t-  doread                      630  local   12/01/80  16:26:02
+#-h-  dowrit                      524  local   12/01/80  16:26:02
+  ## dowrit - write 'from' through 'to' into file
+   integer function dowrit(from, to, file)
+   character file(MAXLINE)
+   integer create, gettxt
+   integer fd, from, k, line, to
+   include "ctxt.i"
+
+   fd = create(file, WRITE)
+   if (fd == ERR)
+      dowrit = ERR
+   else {
+      for (line = from; line <= to; line = line + 1) {
+         k = gettxt(line)
+         call putlin(txt, fd)
+         }
+      call close(fd)
+          call putdec (to-from+1, 1)
+          call putc (NEWLINE)
+      dowrit = OK
+      }
+   return
+   end
+#-t-  dowrit                      524  local   12/01/80  16:26:02
+#-h-  getfn                       706  local   12/01/80  16:26:02
+  ## getfn - get file name from lin(i)
+   integer function getfn(lin, i, file)
+   character lin(MAXLINE), file(MAXLINE)
+   integer i, j, k
+   include "cfile.i"
+
+   getfn = ERR
+   if (lin(i + 1) == BLANK) {
+      j = i + 2      # get new file name
+      call skipbl(lin, j)
+      for (k = 1; lin(j) != NEWLINE; k = k + 1) {
+         file(k) = lin(j)
+         j = j + 1
+         }
+      file(k) = EOS
+      if (k > 1)
+         getfn = OK
+      }
+   else if (lin(i + 1) == NEWLINE & savfil(1) != EOS) {
+      call scopy(savfil, 1, file, 1)   # or old name
+      getfn = OK
+      }
+   # else error
+   if (getfn == OK & savfil(1) == EOS)
+      call scopy(file, 1, savfil, 1)   # save if no old one
+   return
+   end
+#-t-  getfn                       706  local   12/01/80  16:26:02
+#-h-  getind                      196  local   12/01/80  16:26:02
+  ## getind - locate line index in buffer
+   integer function getind(line)
+ integer line, k, j
+ include "cbuf.i"
+
+ k = LINE0
+ for (j=0; j<line; j=j+1)
+        k = buf(k+NEXT)
+ getind = k
+ return
+ end
+#-t-  getind                      196  local   12/01/80  16:26:02
+#-h-  getlst                      645  local   12/01/80  16:26:16
+  ## getlst - collect line numbers at lin(i), increment i
+   integer function getlst(lin, i, status)
+   character lin(MAXLINE)
+   integer getone
+   integer i, num, status
+   include "clines.i"
+
+   line2 = 0
+   for (nlines = 0; getone(lin, i, num, status) == OK; ) {
+      line1 = line2
+      line2 = num
+      nlines = nlines + 1
+      if (lin(i) != COMMA & lin(i) != SEMICOL)
+         break
+      if (lin(i) == SEMICOL)
+         curln = num
+      i = i + 1
+      }
+   nlines = min(nlines, 2)
+   if (nlines == 0)
+      line2 = curln
+   if (nlines <= 1)
+      line1 = line2
+   if (status != ERR)
+      status = OK
+   getlst = status
+   return
+   end
+#-t-  getlst                      645  local   12/01/80  16:26:16
+#-h-  getnum                      898  local   12/01/80  16:26:16
+  ## getnum - convert one term to line number
+   integer function getnum(lin, i, pnum, status)
+   character lin(MAXLINE)
+   integer ctoi, index, optpat, ptscan
+   integer i, pnum, status
+   include "clines.i"
+   include "cpat.i"
+   string digits "0123456789"
+   external index
+
+   getnum = OK
+   if (index(digits, lin(i)) > 0) {
+      pnum = ctoi(lin, i)
+      i = i - 1   # move back; to be advanced at the end
+      }
+   else if (lin(i) == CURLINE)
+      pnum = curln
+   else if (lin(i) == LASTLINE)
+      pnum = lastln
+   else if (lin(i) == SCAN | lin(i) == BACKSCAN) {
+      if (optpat(lin, i) == ERR)   # build the pattern
+         getnum = ERR
+      else if (lin(i) == SCAN)
+         getnum = ptscan(FORWARD, pnum)
+      else
+         getnum = ptscan(BACKWARD, pnum)
+      }
+   else
+      getnum = EOF
+   if (getnum == OK)
+      i = i + 1   # point at next character to be examined
+   status = getnum
+   return
+   end
+#-t-  getnum                      898  local   12/01/80  16:26:16
+#-h-  getone                      988  local   12/01/80  16:26:16
+  ## getone - evaluate one line number expression
+   integer function getone(lin, i, num, status)
+   character lin(MAXLINE)
+   integer getnum
+   integer i, istart, mul, num, pnum, status
+   include "clines.i"
+
+   istart = i
+   num = 0
+   call skipbl(lin, i)
+   if (getnum(lin, i, num, status) == OK)   # first term
+      repeat {            # + or - terms
+         call skipbl(lin, i)
+         if (lin(i) != PLUS & lin(i) != MINUS) {
+            status = EOF
+            break
+            }
+         if (lin(i) == PLUS)
+            mul = +1
+         else
+            mul = -1
+         i = i + 1
+         call skipbl(lin, i)
+         if (getnum(lin, i, pnum, status) == OK)
+            num = num + mul * pnum
+         if (status == EOF)
+            status = ERR
+         } until (status != OK)
+   if (num < 0 | num > lastln)
+      status = ERR
+
+   if (status == ERR)
+      getone = ERR
+   else if (i <= istart)
+      getone = EOF
+   else
+      getone = OK
+
+   status = getone
+   return
+   end
+#-t-  getone                      988  local   12/01/80  16:26:16
+#-h-  getrhs                      500  local   12/01/80  16:26:17
+  ## getrhs - get substitution string for 's' command
+   integer function getrhs(lin, i, sub, gflag)
+   character lin(MAXLINE), sub(MAXPAT)
+   integer maksub
+   integer gflag, i
+   character clower
+
+   getrhs = ERR
+   if (lin(i) == EOS)
+      return
+   if (lin(i + 1) == EOS)
+      return
+   i = maksub(lin, i + 1, lin(i), sub)
+   if (i == ERR)
+      return
+   if (clower(lin(i+1)) == GLOBAL)
+      {
+      i = i + 1
+      gflag = YES
+      }
+   else
+      gflag = NO
+   getrhs = OK
+   return
+   end
+#-t-  getrhs                      500  local   12/01/80  16:26:17
+#-h-  gettxt                      231  local   12/01/80  16:26:17
+ ## gettxt (in memory) - locate text for line and make available
+ integer function gettxt(line)
+ integer getind
+ integer line
+ include "cbuf.i"
+ include "ctxt.i"
+
+ gettxt = getind(line)
+ call scopy (txtbuf, buf(gettxt+TEXT), txt, 1)
+ return
+ end
+#-t-  gettxt                      231  local   12/01/80  16:26:17
+#-h-  inject                     1150  local   12/01/80  16:26:17
+ ## inject (in memory) - put text from lin after curln
+ integer function inject(lin)
+ character lin(MAXLINE)
+ integer addset, getind, nextln
+ integer i, junk, k1, k2, k3
+ include "cbuf.i"
+ include "clines.i"
+
+ for (i=1; lin(i) != EOS; )
+        {
+        k3 = lastbf
+        lastbf = lastbf + TEXT
+        if (lastbf > MAXBUF)
+                {
+                call remark ("file size exceeded.")
+                return(ERR)
+                }
+        buf(lastbf) = lastp
+        lastbf = lastbf + 1
+        while (lin(i) != EOS)
+                {
+                txtbuf(lastp) = lin(i)
+                lastp = lastp + 1
+                if (lastp >= MAXTXT)
+                        {
+                        call remark ("file size exceeded.")
+                        return(ERR)
+                        }
+                i = i + 1
+                if (lin(i-1) == NEWLINE)
+                        break
+                }
+        if (lastp >= MAXTXT)
+                {
+                call remark ("file size exceeded.")
+                return(ERR)
+                }
+        txtbuf(lastp) = EOS
+        lastp = lastp + 1
+        k1 = getind(curln)
+        k2 = getind(nextln(curln))
+        call relink (k1, k3, k3, k2)
+        call relink (k3, k2, k1, k3)
+        curln = curln + 1
+        lastln = lastln + 1
+        inject = OK
+        }
+ return
+ end
+#-t-  inject                     1150  local   12/01/80  16:26:17
+#-h-  move                        748  local   12/01/80  16:26:18
+  ## move - move line1 through line2 after line 3
+   integer function move(line3)
+   integer getind, nextln, prevln
+   integer k0, k1, k2, k3, k4, k5, line3, delta
+   include "clines.i"
+
+   if (line1 <= 0 | (line1 <= line3 & line3 <= line2))
+      move = ERR
+   else {
+      k0 = getind(prevln(line1))
+      k3 = getind(nextln(line2))
+      k1 = getind(line1)
+      k2 = getind(line2)
+      call relink(k0, k3, k0, k3)
+      delta = line2 - line1 + 1
+      if (line3 > line1) {
+         curln = line3
+         line3 = line3 - delta
+         }
+      else
+         curln = line3 + delta
+      k4 = getind(line3)
+      k5 = getind(nextln(line3))
+      call relink(k4, k1, k2, k5)
+      call relink(k2, k5, k4, k1)
+      move = OK
+      }
+   return
+   end
+#-t-  move                        748  local   12/01/80  16:26:18
+#-h-  nextln                      183  local   12/01/80  16:26:18
+  ## nextln - get line after 'line'
+   integer function nextln(line)
+   integer line
+   include "clines.i"
+
+   nextln = line + 1
+   if (nextln > lastln)
+      nextln = 0
+   return
+   end
+#-t-  nextln                      183  local   12/01/80  16:26:18
+#-h-  optpat                      546  local   12/01/80  16:26:18
+  ## optpat - make pattern if specified at lin(i)
+   integer function optpat(lin, i)
+   character lin(MAXLINE)
+   integer makpat
+   integer i
+   include "cpat.i"
+
+   if (lin(i) == EOS)
+      i = ERR
+   else if (lin(i + 1) == EOS)
+      i = ERR
+   else if (lin(i + 1) == lin(i))   # repeated delimiter
+      i = i + 1         # leave existing pattern alone
+   else
+      i = makpat(lin, i + 1, lin(i), pat)
+   if (pat(1) == EOS)
+      i = ERR
+   if (i == ERR) {
+      pat(1) = EOS
+      optpat = ERR
+      }
+   else
+      optpat = OK
+   return
+   end
+#-t-  optpat                      546  local   12/01/80  16:26:18
+#-h-  prevln                      184  local   12/01/80  16:26:18
+  ## prevln - get line before 'line'
+   integer function prevln(line)
+   integer line
+   include "clines.i"
+
+   prevln = line - 1
+   if (prevln < 0)
+      prevln = lastln
+   return
+   end
+#-t-  prevln                      184  local   12/01/80  16:26:18
+#-h-  ptscan                      488  local   12/01/80  16:26:19
+  ## ptscan - scan for next occurrence of pattern
+   integer function ptscan(way, num)
+   integer gettxt, match, nextln, prevln
+   integer k, num, way
+   include "clines.i"
+   include "cpat.i"
+   include "ctxt.i"
+
+   num = curln
+   repeat {
+      if (way == FORWARD)
+         num = nextln(num)
+      else
+         num = prevln(num)
+      k = gettxt(num)
+      if (match(txt, pat) == YES) {
+         ptscan = OK
+         return
+         }
+      } until (num == curln)
+   ptscan = ERR
+   return
+   end
+#-t-  ptscan                      488  local   12/01/80  16:26:19
+#-h-  relink                      165  local   12/01/80  16:26:19
+  ## relink - rewrite two half line links
+   subroutine relink(a, x, y, b)
+   integer a, b, x, y
+   include "cbuf.i"
+
+ buf(x+PREV) = a
+ buf(y+NEXT) = b
+   return
+   end
+#-t-  relink                      165  local   12/01/80  16:26:19
+#-h-  setbuf                      277  local   12/01/80  16:26:19
+ ## setbuf (in memory) - initialize line storage buffer
+ subroutine setbuf
+ integer addset
+ integer junk
+ include "cbuf.i"
+ include "clines.i"
+
+ call relink (LINE0, LINE0, LINE0, LINE0)
+ lastbf = LINE0 + TEXT
+ lastp = 1
+ txtbuf(lastp) = EOS
+ lastp = lastp + 1
+ curln = 0
+ lastln = 0
+ return
+ end
+#-t-  setbuf                      277  local   12/01/80  16:26:19
+#-h-  subst                      1396  local   12/01/80  16:26:19
+  ## subst - substitute "sub" for occurrences of pattern
+   integer function subst(sub, gflag)
+   character new(MAXLINE), sub(MAXPAT)
+   integer addset, amatch, gettxt, inject, conct
+   integer gflag, j, junk, k, lastm, line, m, status, subbed,
+      tagbeg (10), tagend (10)
+   include "clines.i"
+   include "cpat.i"
+   include "ctxt.i"
+
+   subst = ERR
+   if (line1 <= 0)
+      return
+   for (line = line1; line <= line2; line = line + 1) {
+      j = 1
+      subbed = NO
+      junk = gettxt(line)
+      lastm = 0
+      for (k = 1; txt(k) != EOS; ) {
+         if (gflag == YES | subbed == NO)
+            m = amatch(txt, k, pat, tagbeg, tagend)
+         else
+            m = 0
+         if (m > 0 & lastm != m) {   # replace matched text
+            subbed = YES
+            call catsub(txt, tagbeg, tagend, sub, new, j, MAXLINE)
+            lastm = m
+            }
+         if (m == 0 | m == k) {   # no match or null match
+            junk = addset(txt(k), new, j, MAXLINE)
+            k = k + 1
+            }
+         else            # skip matched text
+            k = m
+         }
+      if (subbed == YES) {
+         if (addset(EOS, new, j, MAXLINE) == NO) {
+            subst = ERR
+            break
+            }
+         call delete(line, line, status)   # remembers dot
+         subst = inject(new)
+         if (subst == ERR)
+            break
+         subst = OK
+         }
+      }
+   return
+   end
+#-t-  subst                      1396  local   12/01/80  16:26:19
+#-t-  edin.r                    23884  local   12/01/80  16:29:26

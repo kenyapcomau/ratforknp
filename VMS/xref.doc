@@ -1,0 +1,66 @@
+.bp 1
+.in 0
+.he 'XREF (1)'1/1/79'XREF (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+xref - make a cross reference of symbols
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+xref [-f] [files ...]
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Xref
+produces a cross-reference
+list of the symbols in each of the named files
+on the standard output.
+Each symbol is listed followed by the numbers of the lines
+in which it appears.
+If no files are given,
+or the file "-" is specified, xref reads the standard input.
+.sp
+A symbol is defined as a string of letters, digits, underlines,
+or periods that begins with a letter.
+Symbols exceeding an internal limit are truncated.
+This limit is determined by the MAXTOK definition in
+the source code, and is currently set to 15.
+.sp
+Normally, xref treats upper- and lower-case letters as different
+characters.  The -f option causes all letters to be folded to
+lower-case.
+.fi
+.sp
+.ne 2
+.ti -3
+DIAGNOSTICS
+.br
+out of storage
+.br
+.in +3
+The file contains too many symbols or references to fit
+within the current limitations of xref.
+The size of the buffer is determined by the MAXBUF definition
+in the source code.
+.in -3
+.fi
+.sp
+.ti -3
+AUTHORS
+.br
+David Hanson and friends (U. of Arizona)
+.sp
+.ne 2
+.ti -3
+BUGS/DEFICIENCIES
+.br
+There should be a means of suppressing "junk" symbols such
+as "the", "a", etc.

@@ -1,0 +1,225 @@
+.bp 1
+.in 0
+.he 'SEDIT (1)'11/30/79'SEDIT (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+sedit - stream editor
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+sedit [-n] {[-e script | -f sfile]... | script} [file]...
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Sedit
+copies the named input
+files
+to the standard output, performing
+editing as directed by sedit commands in "script" or
+in "sfile".
+The -e
+flag indicates that the next argument is
+to be interpreted as an sedit command (see below).
+The -f
+flag indicates that the next argument is the name of a file
+in which
+sedit commands appear one per line.
+The
+-e and -f
+arguments may be intermixed in any order.
+The order of command
+execution
+is the order in which commands are read.
+If no
+-e or -f
+flags are given, the first argument is used as an sedit command.
+Normally, sedit writes each line of input to the output after editing;
+the -n option suppresses this action.  As a result, the only output
+is that resulting from sedit commands.
+.sp
+When the first argument not in the scope of a flag is encountered,
+it and all succeeding arguments are taken as input files.
+If no files are given, or if the name "-" is specified, the
+standard input is read.
+.sp
+Sedit commands
+have the general form
+.sp
+.in +3
+.nf
+line1 [, line2] command arguments
+.in -3
+.sp
+.fi
+A line number (line1 or line2) is either a decimal number
+that refers to a specific input line (input lines
+are counted cumulatively across files), a "$" that
+refers to the last line of input,
+or a /pattern/ where pattern is a regular expression (as in edit).
+Line number 0 may be used to specify commands that should be
+executed before any input is read.
+.sp
+A command with no line numbers
+is applied to every line of input.
+A command with one line number
+is applied to every line of input that matches the line number.
+A command with two line numbers
+is applied to every line of input beginning with the first line
+that matches line1 through the next line that
+matches line2.  Thereafter, the process is repeated, looking again
+for a line that matches line1.
+.sp
+Sedit accepts the following commands.  Each command may be
+used with 0, 1, or 2 line numbers.
+The a, c, and i commands may not appear in command line scripts.
+.sp
+.nf
+.cc +
+a
+<text>
+.
++cc .
+.fi
+.in +3
+Append.  The <text> is placed on the output after each selected
+line.  The <text> does not change the line number nor is it subject
+to subsequent sedit commands.
+.in -3
+.sp
+.ne 5
+.nf
+.cc +
+c
+<text>
+.
++cc .
+.fi
+.in +3
+Change.  The selected lines are deleted and
+<text> is placed on the output in their place.
+The <text> does not change the line number nor is it subject
+to subsequent sedit commands.
+.in -3
+.sp
+d
+.in +3
+Delete.  The selected lines are deleted.
+.in -3
+.sp
+f file
+.in +3
+File of script commands.  The contents of "file" are read in,
+replacing all previous script commands.
+The line number does not change, nor is any further substitution done.
+.in -3
+.sp
+.nf
+.cc +
+i
+<text>
+.
++cc .
+.fi
+.in +3
+Insert.  The <text> is placed on the output before each selected
+line.  The <text> does not change the line number nor is it subject
+to subsequent sedit commands.
+.in -3
+.sp
+p
+.in +3
+Print.  The selected lines are printed on the standard output.
+.in -3
+.sp
+r file
+.in +3
+Read file.  The contents of "file" are placed on the output after
+each selected line exactly as if the contents
+were given as <text> in an
+a command.  The new lines
+do not change the line number nor are they subject
+to subsequent sedit commands.
+.in -3
+.sp
+s/pat/new/gp
+.in +3
+Substitute.  The leftmost
+occurrences of pat in the selected lines is changed to new.
+If g is specified, all occurrences are changed.  If p is
+specified, the resulting line is printed.
+.in -3
+.sp
+w file
+.in +3
+Write file.  The selected lines are appended to "file".  Files
+mentioned in w commands are created before processing begins.
+The limit on the number of w commands depends on the number
+of files that can be opened at the same time.
+.in -3
+.sp
+=
+.in +3
+Print line number.  The current line number is printed
+on the output as a line.
+.in -3
+.sp
+Text appended by a, c, or r commands is placed on the output in
+the same order as the execution of the commands.
+Similar comments apply to text inserted by i commands.
+.sp
+Sedit
+can accomodate commands totaling approximately 5000 characters
+(including <text> arguments), and lines up to 120 characters in length.
+.fi
+.sp
+.ne 2
+.ti -3
+SEE ALSO
+.br
+edit, change, find, tr
+.fi
+.sp
+.ne 2
+.ti -3
+DIAGNOSTICS
+.br
+In addition to the usual error messages resulting from file access
+failure, sedit issues the following messages preceeding by the
+offending command line.
+.sp
+bad line numbers
+.in +3
+indicates that the line number expressions are invalid.
+.in -3
+.sp
+invalid command
+.in +3
+indicates that the command preceeding the message is illegal.
+This message is issued for a, i, or c commands if they appear
+in command string scripts.
+.in -3
+.sp
+too many commands
+.in +3
+indicates exhaustion of space to hold commands.
+The size of the command buffer is determined by the
+MAXCMD and MAXBUF definitions in the source code.
+.in -3
+.sp
+.ti -3
+AUTHOR
+.br
+Chris Fraser (U. of Arizona)
+.sp
+.ti -3
+BUGS/DEFICIENCIES
+.br
+The '$' indicator for end-of-file doesn't always work.

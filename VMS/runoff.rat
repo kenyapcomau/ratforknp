@@ -1,0 +1,1328 @@
+define(char,byte)
+define(max,max0)
+define(min,min0)
+define(STDERR,5)
+define(STDOUT,6)
+define(STDIN,7)
+define(ARB,*)
+define(HUGE,1000)
+define(COMMAND,PERIOD)
+define(PAGENUM,PERCENT)
+define(EOF,-1)
+define(EOS,0)
+define(BACKSPACE,8)
+define(TAB,9)
+define(NEWLINE,10)
+define(RETURN,13)
+define(BLANK,32)
+define(PERCENT,37)
+define(PLUS,43)
+define(MINUS,45)
+define(PERIOD,46)
+define(DIGIT,48)
+define(DIG0,48)
+define(DIG9,57)
+define(BIGA,65)
+define(BIGZ,90)
+define(LETTER,97)
+define(LETA,97)
+define(LETZ,122)
+define(UNDERLINE,95)
+define(NO,0)
+define(YES,1)
+define(INSIZE,256)
+define(OUTSIZE,132)
+define(MAXCHARS,14)
+define(MAXSEG,65)
+define(MAXLAYER,5)	# for overstrikes
+define(MAXLINE,80)
+define(MAXMAC,50)
+define(MAXMLIN,200)
+define(MAXPB,50)
+define(MAXPOOL,2000)
+define(MAXTABS,20)
+define(MAXITEMS,16)
+define(MAXENV,20)
+define(PAGLEN,66)
+define(PAPERSIZE,65)
+define(M1DEF,2)
+define(M2DEF,2)
+define(M3DEF,2)
+define(M4DEF,2)
+define(PAGEWIDTH,60)
+define(ARABIC,0)
+define(ROMAN,1)
+define(ADJ,1)
+define(ARA,2)
+define(BLN,3)
+define(BPG,4)
+define(BRE,5)
+define(CMC,6)
+define(CEN,7)
+define(DFN,8)
+define(FIL,9)
+define(FOT,10)
+define(HED,11)
+define(IND,12)
+define(INX,13)
+define(LIT,14)
+define(LNL,15)
+define(LNS,16)
+define(M1,17)
+define(M2,18)
+define(M3,19)
+define(M4,20)
+define(NAD,21)
+define(NED,22)
+define(NFL,23)
+define(PGL,24)
+define(POF,25)
+define(RNV,26)
+define(ROM,27)
+define(SNV,28)
+define(SKP,29)
+define(SPA,30)
+define(TCL,31)
+define(TCH,32)
+define(TMI,33)
+define(UBC,34)
+define(UDL,35)
+define(MAC,36)
+define(UNKNOWN,37)
+# runoff - text formatter main program
+
+implicit none
+char inbuf(INSIZE)
+integer ngetl
+
+include "cparam.i"
+include "cpage.i"
+
+while(ngetl(inbuf) != EOF)
+	if(inbuf(1) == comchr)	# it's a command
+		call cmd(inbuf)
+	else			# it's text
+		call text(inbuf)
+if(lineno > 0)
+	call spc(HUGE)		# flush last output
+end
+# blockdata - set initial values for parameters
+
+blockdata
+implicit none
+
+include "cpage.i"
+include "cparam.i"
+include "cout.i"
+include "cmacs.i"
+include "cenv.i"
+
+data curpag/0/
+data newpag/1/
+data lineno/0/
+data plval/PAGLEN/
+data m1val/M1DEF/
+data m2val/M2DEF/
+data m3val/M3DEF/
+data m4val/M4DEF/
+data bottom/62/ # PAGLEN - M1DEF - M2DEF - M3DEF -M4DEF
+data header/MAXLINE*NEWLINE/
+data footer/MAXLINE*NEWLINE/
+
+data comchr/COMMAND/
+data tabchr/TAB/
+data ubchr/BLANK/
+data fill/YES/
+data adjust/YES/
+data numtyp/ARABIC/
+data lsval/1/
+data inval/0/
+data llval/PAPERSIZE/
+data tival/0/
+data poval/0/
+data ceval/0/
+data ulval/0/
+data litval/0/
+data skpval/0/
+data tabpos/8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,4*0/
+data blval/0/
+
+data outp/0/
+data outw/0/
+data outwds/0/
+
+data macnam/MAXMAC*0/
+data macend/MAXMAC*0/
+data macptr/MAXMLIN*0/
+data macp/0/
+data linep/0/
+data poolp/0/
+data pbptr/MAXPB*0/
+data pblev/0/
+data stpool/MAXPOOL*EOS/
+
+data level/0/
+end
+# atoi - convert str at string(i) to integer, increment i
+
+integer function atoi(str,i)
+implicit none
+char str(ARB)
+integer d,i
+
+while(str(i) == BLANK)
+	i=i+1
+for(atoi=0; str(i) != EOS; i=i+1){
+	d=str(i)-DIG0
+	if(d < 0 | d > 9)	# non-digit
+		break
+	atoi=10*atoi+d
+	}
+return
+end
+# blnk - space n lines (to new page if necessary, cf spc); decrement n
+
+subroutine blnk(n)
+implicit none
+integer n,i
+integer min
+
+include "cpage.i"
+
+call brk
+while(n > 0){
+	if(lineno > bottom){
+		call pfoot
+		lineno=0
+		}
+	if(lineno == 0)
+		call phead
+	i=min(n,bottom+1-lineno)
+	call skip(i)
+	n=n-i
+	lineno=lineno+i
+	}
+if(lineno > bottom)
+	call pfoot
+return
+end
+# brk - end current filled line
+
+subroutine brk
+implicit none
+
+include "cout.i"
+
+if(outp > 0){
+	outbuf(outp)=NEWLINE
+	outbuf(outp+1)=EOS
+	call put(outbuf)
+	}
+outp=0
+outw=0
+outwds=0
+return
+end
+# centre - centre a line by setting tival
+
+subroutine center(buf)
+implicit none
+char buf(ARB)
+integer max,width
+
+include "cparam.i"
+
+tival=max((llval+tival-width(buf))/2,0)
+return
+end
+# cmd - perform formatting command
+
+subroutine cmd(buf)
+implicit none
+char buf(ARB)
+integer comtyp,getval
+integer macnum,argtyp,ct,spval,val
+
+include "cpage.i"
+include "cparam.i"
+
+ct=comtyp(buf,macnum)
+if(ct == UNKNOWN)	# ignore unknown commands
+	return
+val=getval(buf,argtyp)
+goto(ADJ,ARA,BLN,BPG,BRE,CMC,CEN,DFN,FIL,FOT,HED,IND,INX,
+	LIT,LNL,LNS,M1,M2,M3,M4,NAD,NED,NFL,PGL,POF,RNV,ROM,
+	SNV,SKP,SPA,TCL,TCH,TMI,UBC,UDL,MAC),ct
+
+SPA continue
+	call set(spval,val,argtyp,1,0,HUGE)
+	call spc(spval)
+goto 999
+
+IND continue
+INX continue
+	if(ct == IND)
+		call brk
+	call set(inval,val,argtyp,0,0,llval-1)
+	tival=inval
+goto 999
+
+TMI continue
+	call brk
+	call set(tival,val,argtyp,0,0,llval)
+goto 999
+
+CEN continue
+	call brk
+	call set(ceval,val,argtyp,1,0,HUGE)
+goto 999
+
+UDL continue
+	call set(ulval,val,argtyp,0,1,HUGE)
+goto 999
+
+FIL continue
+	call brk
+	fill=YES
+goto 999
+
+NFL continue
+	call brk
+	fill=NO
+goto 999
+
+BRE continue
+	call brk
+goto 999
+
+BLN continue
+	call set(blval,val,argtyp,1,0,HUGE)
+	call blnk(blval)
+goto 999
+
+NED continue
+	if(val > bottom-lineno+1)
+		call spc(HUGE)
+goto 999
+
+LNS continue
+	call set(lsval,val,argtyp,1,1,HUGE)
+goto 999
+
+LNL continue
+	call set(llval,val,argtyp,PAGEWIDTH,tival+1,HUGE)
+goto 999
+
+PGL continue
+	call set(plval,val,argtyp,PAGLEN,
+		m1val+m2val+m3val+m4val+1,HUGE)
+	bottom=plval-m3val-m4val
+goto 999
+
+BPG continue
+	if(lineno > 0)
+		call spc(HUGE)
+	call set(curpag,val,argtyp,curpag+1,-HUGE,HUGE)
+	newpag=curpag
+goto 999
+
+HED continue
+	call gettl(buf,header)
+goto 999
+
+FOT continue
+	call gettl(buf,footer)
+goto 999
+
+NAD continue
+	adjust=NO
+goto 999
+
+ADJ continue
+	adjust=YES
+goto 999
+
+ROM continue
+	numtyp=ROMAN
+goto 999
+
+ARA continue
+	numtyp=ARABIC
+goto 999
+
+LIT continue
+	call set(litval,val,argtyp,1,0,HUGE)
+goto 999
+
+M1 continue
+	call set(m1val,val,argtyp,M1DEF,
+		0,plval-(m2val+m3val+m4val+1))
+goto 999
+
+M2 continue
+	call set(m2val,val,argtyp,M2DEF,
+		0,plval-(m1val+m3val+m4val+1))
+goto 999
+
+M3 continue
+	call set(m3val,val,argtyp,M3DEF,
+		0,plval-(m1val+m2val+m4val+1))
+	bottom=plval-m3val-m4val
+goto 999
+
+M4 continue
+	call set(m4val,val,argtyp,M4DEF,
+		0,plval-(m1val+m2val+m3val+1))
+	bottom=plval-m3val-m4val
+goto 999
+
+CMC continue
+	if(argtyp != NEWLINE)
+		comchr=argtyp
+	else
+		comchr=COMMAND
+goto 999
+
+POF continue
+	call set(poval,val,argtyp,0,0,PAPERSIZE)
+goto 999
+
+SKP continue
+	call set(skpval,val,argtyp,1,0,HUGE)
+goto 999
+
+DFN continue
+	call getmac(buf)
+	goto 999
+
+TCH continue
+	if(argtyp != NEWLINE)
+		tabchr=argtyp
+	else
+		tabchr=TAB
+goto 999
+
+TCL continue
+	call tabcol(buf)
+goto 999
+
+UBC continue
+	if(argtyp != NEWLINE)
+		ubchr=argtyp
+	else
+		ubchr=BLANK
+goto 999
+
+RNV continue
+	if(val <= 0)
+		val=1
+	call resenv(val)
+goto 999
+
+SNV continue
+	call savenv
+goto 999
+
+MAC continue
+	call expand(macnum)
+
+999 return
+end
+# comtyp - decode command type
+
+integer function comtyp(buf,macnum)
+implicit none
+char buf(ARB)
+char lcase
+integer i,j,macnum,cmdnum(35)
+
+include "cmacs.i"
+
+define(SCS,string cs)	# to cram it all in
+SCS "adarblbpbrcccedefifoheinixlilllsm1m2m3m4nanenfplporerosesksptatctiubul"
+data cmdnum/ADJ,ARA,BLN,BPG,BRE,CMC,CEN,DFN,FIL,FOT,HED,IND,
+	INX,LIT,LNL,LNS,M1,M2,M3,M4,NAD,NED,NFL,PGL,POF,RNV,ROM,
+	SNV,SKP,SPA,TCL,TCH,TMI,UBC,UDL/
+
+for(macnum=macp; macnum > 0; macnum=macnum-1){
+	j=macnam(macnum)
+	if(lcase(buf(2)) == stpool(j) & lcase(buf(3)) == stpool(j+1)){
+		comtyp=MAC
+		return
+		}
+	}
+comtyp=1
+for(i=1; cs(i) != EOS; i=i+2){
+	if(buf(2) == cs(i) & buf(3) == cs(i+1)){
+		comtyp=cmdnum(comtyp)
+		return
+		}
+	comtyp=comtyp+1
+	}
+comtyp=UNKNOWN
+return
+end
+# expand - pushback macro definition onto input
+
+subroutine expand(macnum)
+implicit none
+integer macnum,macst,i
+
+include "cmacs.i"
+
+if(macend(macnum) == 0)
+	return	# shouldn't happen
+if(macnum > 1)
+	macst=macend(macnum-1)
+else
+	macst=0
+for(i=macend(macnum); i > macst; i=i-1){
+	pblev=pblev+1
+	if(pblev > MAXPB)
+		break	# to catch stack overflow
+	pbptr(pblev)=macptr(i)	# copy line pointers into pushback buffer
+	}
+return
+end
+# getlin - gets an input line
+
+integer function getlin(buf)
+implicit none
+char buf(ARB)
+integer i,len
+
+read(STDIN,9050,end=1000)len,(buf(i),i=1,len)
+9050 format(q,MAXLINE a1)
+buf(len+1)=NEWLINE
+buf(len+2)=EOS
+getlin=YES
+return
+
+1000 getlin=EOF
+return
+end
+# getmac - collect macro
+
+subroutine getmac(buf)
+implicit none
+integer comtyp,length
+integer dotlev,ct,macnum,l,i
+char buf(ARB)
+char line(INSIZE)
+integer ngetl
+char lcase
+
+include "cparam.i"
+include "cmacs.i"
+
+data dotlev/0/
+
+i=1
+while(buf(i) != BLANK & buf(i) != NEWLINE)
+	i=i+1
+call skipbl(buf,i)
+if(buf(i) == NEWLINE)
+	return	# no macro name
+if(poolp > MAXPOOL-3)
+	return	# no room for name
+macp=macp+1
+poolp=poolp+1
+macnam(macp)=poolp
+stpool(poolp)=lcase(buf(i))   # always store macro in lower case
+stpool(poolp+1)=lcase(buf(i+1))
+stpool(poolp+2)=EOS
+poolp=poolp+3
+dotlev=1
+repeat{
+	if(ngetl(line) == EOF)
+		break	# unexpected EOF
+	if(line(1) == comchr){
+		if(line(2) == PERIOD)
+			dotlev=dotlev-1
+		else{
+			ct=comtyp(line,macnum)
+			if(ct == DFN)	# could have included .de 's
+				dotlev=dotlev+1
+			}
+		}
+	if(dotlev > 0){
+		l=length(line)+1
+		if(poolp+l > MAXPOOL)
+			return	# no room for definition
+		linep=linep+1
+		macptr(linep)=poolp+1
+		macend(macp)=linep
+		call scopy(line,1,stpool,poolp+1)
+		poolp=poolp+l
+		}
+	}until(dotlev <= 0)
+return
+end
+# getseg - puts out part of header; advances i to next segment
+
+integer function getseg(buf,copy,clen,i,term,pageno)
+implicit none
+char buf(ARB),copy(ARB),term
+integer i,pageno,j,clen
+integer itoa,itorom
+
+include "cparam.i"
+
+getseg=1
+for(;getseg < clen & buf(i) != term & buf(i) != NEWLINE; i=i+1){
+	if(buf(i) == PAGENUM){
+		if(numtyp == ARABIC)
+			j=itoa(pageno,copy(getseg),min(MAXCHARS,clen-getseg+1))
+		else
+		       j=itorom(pageno,copy(getseg),min(MAXCHARS,clen-getseg+1))
+		getseg=getseg+j
+		}
+	else{
+		copy(getseg)=buf(i)
+		getseg=getseg+1
+		}
+	}
+if(buf(i) == term)
+	i=i+1
+copy(getseg)=EOS
+getseg=getseg-1
+return
+end
+# gettl - copy title from buf to ttl
+
+subroutine gettl(buf,ttl)
+implicit none
+char buf(ARB),ttl(ARB)
+integer i
+
+i=1			# skip command name
+while(buf(i) != BLANK & buf(i) != NEWLINE)
+	i=i+1
+call skipbl(buf,i)	# find argument
+call scopy(buf,i,ttl,1)
+return
+end
+# getval - evaluate optional numeric argument
+
+integer function getval(buf,argtyp)
+implicit none
+char buf(ARB)
+integer atoi
+integer argtyp,i
+
+i=1			# skip command name
+while(buf(i) != BLANK & buf(i) != NEWLINE)
+	i=i+1
+call skipbl(buf,i)	# find argument
+argtyp=buf(i)
+if(argtyp == PLUS | argtyp == MINUS)
+	i=i+1
+getval=atoi(buf,i)
+return
+end
+# getwrd - get a non-blank word from instr(i) to out, increment i
+
+integer function getwrd(instr,i,out)
+implicit none
+char instr(ARB),out(ARB)
+integer i,j
+
+include "cparam.i"
+
+while(instr(i) == BLANK & instr(i) != tabchr)
+	i=i+1
+j=1
+if(instr(i) == tabchr){
+	out(j)=instr(i)
+	i=i+1
+	j=j+1
+	}
+else{
+	while(instr(i) != EOS & instr(i) != BLANK
+		& instr(i) != NEWLINE & instr(i) != tabchr){
+		out(j)=instr(i)
+		i=i+1
+		j=j+1
+		}
+	}
+out(j)=EOS
+getwrd=j-1
+return
+end
+# itoa - convert int to char string in str
+
+integer function itoa(int,str,size)
+implicit none
+integer d,i,int,intval,j,size
+integer iabs,mod
+char k,str(size)
+
+string digits "0123456789"
+
+intval=iabs(int)
+str(1)=EOS
+i=1
+repeat{
+	i=i+1
+	d=mod(intval,10)
+	str(i)=digits(d+1)
+	intval=intval/10
+	}until(intval==0 | i>=size)
+if(int<0 & i < size){	# then sign
+	i=i+1
+	str(i)=MINUS
+	}
+itoa=i-1
+for(j=1; j<i; j=j+1){	# then reverse
+	k=str(i)
+	str(i)=str(j)
+	str(j)=k
+	i=i-1
+	}
+return
+end
+# itorom - converts integer to ROMAN numerals
+
+integer function itorom(num,str,width)
+implicit none
+char str(ARB)
+integer num,width
+integer i,j,int
+integer romval(8),reltab(8)
+
+string romlet "mdclxvi0"
+data romval/1000,500,100,50,10,5,1,0/
+data reltab/2,1,2,1,2,1,1,0/
+
+int=num
+itorom=1
+if(int < 0 & width > 1){
+	int=-int
+	str(itorom)=MINUS
+	itorom=itorom+1
+	}
+for(i=1; int > 0; i=i+1){
+	while(int >= romval(i)){
+		int=int-romval(i)
+		str(itorom)=romlet(i)
+		if(itorom >= width-1){
+			str(itorom+1)=EOS
+			return
+			}
+		itorom=itorom+1
+		}
+	j=i+reltab(i)
+	if(int >= (romval(i)-romval(j))){
+		int=int-(romval(i)-romval(j))
+		if(itorom >= width-2){
+			str(itorom+1)=EOS
+			return
+			}
+		str(itorom)=romlet(j)
+		str(itorom+1)=romlet(i)
+		itorom=itorom+2
+		}
+	}
+str(itorom)=EOS
+itorom=itorom-1
+return
+end
+# lcase - return lower case version of character
+
+char function lcase(c)
+implicit none
+char c
+
+lcase=c
+if(BIGA <= lcase & lcase <= BIGZ)
+	lcase=lcase-BIGA+LETA
+return
+end
+# leadbl - delete leading blanks, set tival
+
+subroutine leadbl(buf)
+implicit none
+char buf(ARB)
+integer max
+integer i,j
+
+include "cparam.i"
+
+call brk
+for(i=1; buf(i) == BLANK; i=i+1)	# find first non-blank
+	;
+if(buf(i) != NEWLINE)
+	tival=i-1
+for(j=1; buf(i) != EOS; j=j+1){		# move line to left
+	buf(j)=buf(i)
+	i=i+1
+	}
+buf(j)=EOS
+return
+end
+# length - compute length of string
+
+integer function length(str)
+implicit none
+char str(ARB)
+
+for(length=0; str(length+1) != EOS; length=length+1)
+	;
+return
+end
+# nextab - returns position of next tab stop
+
+integer function nextab(pos)
+implicit none
+integer i,pos
+
+include "cparam.i"
+
+for(i=1; i <= MAXTABS; i=i+1){
+	if(tabpos(i) == 0)
+		break
+	if(tabpos(i) > pos){
+		nextab=tabpos(i)
+		return
+		}
+	}
+nextab=pos+1
+return
+end
+# ngetl - gets line from input or pushback buffer
+
+integer function ngetl(buf)
+implicit none
+
+integer getlin
+char buf(ARB)
+
+include "cmacs.i"
+
+if(pblev <= 0)
+	ngetl=getlin(buf)
+else{
+	call scopy(stpool,pbptr(pblev),buf,1)
+	pblev=pblev-1
+	}
+return
+end
+# pfoot - put out page footer
+
+subroutine pfoot
+implicit none
+
+include "cpage.i"
+
+call skip(m3val)
+if(m4val > 0){
+	call puttl(footer,curpag)
+	call skip(m4val-1)
+	}
+return
+end
+# phead - put out page header
+
+subroutine phead
+implicit none
+
+include "cpage.i"
+
+curpag=newpag
+newpag=newpag+1
+if(m1val > 0){
+	call skip(m1val-1)
+	call puttl(header,curpag)
+	}
+call skip(m2val)
+lineno=m1val+m2val+1
+return
+end
+# put - put out line with proper spacing and indenting
+
+subroutine put(buf)
+implicit none
+char buf(ARB)
+integer min,nextab
+integer col,i,j
+
+include "cpage.i"
+include "cparam.i"
+
+if(lineno == 0 | lineno > bottom)
+	call phead
+for(i=1; i <= (tival+poval); i=i+1)	# indenting and page offset
+	call putc(BLANK)
+col=tival
+tival=inval
+for(i=1; buf(i) != EOS; i=i+1){
+	if(buf(i) == ubchr)
+		buf(i)=BLANK	# put blanks instead of blank replacement
+	if(buf(i) == tabchr){
+		j=nextab(col)	# nextab wants last used column
+		for(; col < j; col=col+1)
+			call putc(BLANK)
+		next
+		}
+	else if(buf(i) == BACKSPACE)
+		col=col-1
+	else
+		col=col+1
+	call putc(buf(i))
+	}
+call skip(min(lsval-1,bottom-lineno))
+lineno=lineno+lsval
+if(lineno > bottom){
+	call pfoot
+	if(skpval > 0)
+		call skpage(skpval)
+	}
+return
+end
+# putc - output characters with overstrike capability
+
+subroutine putc(c)
+implicit none
+char c
+integer lp,cp(MAXLAYER),layer,top,i,j
+char lines(OUTSIZE,MAXLAYER)
+
+data lp,cp,layer,top/0,MAXLAYER*0,1,1/
+
+if(c == NEWLINE){	# flush output
+	write(STDOUT,600)(lines(i,1),i=1,cp(1))
+	600 format(1x,OUTSIZE a1)
+	do j=2,top{
+		write(STDOUT,601)(lines(i,j),i=1,cp(j))
+		601 format('+',OUTSIZE a1)
+		}
+	lp=0
+	do i=1,MAXLAYER
+		cp(i)=0
+	layer=1
+	top=1
+	return
+	}
+if(lp >= OUTSIZE)	# past end, nothing to be done
+	return
+if(c == BLANK)
+	lp=lp+1
+else if(c == BACKSPACE | c == RETURN){	# recompute next useable layer
+	if(c == RETURN)
+		lp=0
+	else
+		lp=max(lp-1,0)
+	do i=1,MAXLAYER
+		if(lp >= cp(i))
+			break	# can use this layer
+	layer=min(i,MAXLAYER)
+	top=max(top,layer)	# mark last layer used
+	}
+else if(c > BLANK){
+	lp=lp+1
+	for(i=cp(layer); i < lp; ){
+		i=i+1
+		lines(i,layer)=BLANK
+		}
+	cp(layer)=i
+	lines(lp,layer)=c
+	}
+return
+end
+# putstr - puts a string to output
+
+subroutine putstr(str)
+implicit none
+char str(ARB)
+integer i
+
+for(i=1; str(i) != EOS; i=i+1)
+	call putc(str(i))
+return
+end
+# puttl - put out title line with optional page number
+
+subroutine puttl(buf,pageno)
+implicit none
+char buf(ARB),copy(MAXSEG),term
+integer getseg
+integer pageno,i,j,col,newcol,len
+
+include "cparam.i"
+
+for(i=1; i <= poval; i=i+1)
+	call putc(BLANK)
+term=buf(1)
+if(term == NEWLINE)
+	term=EOS	# in case of blank title
+i=2
+col=1
+len=getseg(buf,copy,MAXSEG,i,term,pageno)
+call putstr(copy)
+col=col+len
+len=getseg(buf,copy,MAXSEG,i,term,pageno)
+newcol=(llval-len)/2+1	# start of centre
+for(; col < newcol; col=col+1)
+	call putc(BLANK)
+call putstr(copy)
+col=col+len
+len=getseg(buf,copy,MAXSEG,i,term,pageno)
+newcol=llval-len+1	# start of right
+for(; col < newcol; col=col+1)
+	call putc(BLANK)
+call putstr(copy)
+call putc(NEWLINE)
+return
+end
+# putwrd - put a word in outbuf; includes margin justification
+
+subroutine putwrd(wrdbuf)
+implicit none
+char wrdbuf(ARB)
+integer length, width, nextab
+integer last,lnval,w,nextra
+
+include "cout.i"
+include "cparam.i"
+
+lnval=llval-tival
+if(wrdbuf(1) == tabchr){
+	outw=nextab(outw+tival)-tival	# because outw floats from the indent
+					# and nextab is absolute
+	if(outp > 0 & outw > lnval){
+		call brk
+		outw=nextab(outw+tival)-tival
+		}
+	outp=outp+1
+	outbuf(outp)=tabchr
+	outwds=0		# adjust from next word
+	}
+else{
+	w=width(wrdbuf)
+	last=length(wrdbuf)+outp+1	# new end of outbuf
+	if(outp > 0 & (outw+w > lnval | last >= OUTSIZE)){	 # too big
+		last=last-outp		# remember end of wrdbuf
+		nextra=lnval-outw+1
+		if(adjust == YES){
+			call spread(outbuf,outp,nextra,outwds)
+			if(nextra > 0 & outwds > 1)
+				outp=outp+nextra
+			}
+		call brk		# flush previous line
+		}
+	call scopy(wrdbuf,1,outbuf,outp+1)
+	outp=last
+	outbuf(outp)=BLANK		# blank between words
+	outw=outw+w+1			# 1 for blank
+	outwds=outwds+1
+	}
+return
+end
+# resenv - restore environment n levels back
+
+subroutine resenv(n)
+implicit none
+integer max
+integer n,i
+
+include "cenv.i"
+include "cparam.i"
+
+call brk		# to flush any latent output
+level=max(1,level-n)
+comchr=envir(1,level)
+tabchr=envir(2,level)
+ubchr=envir(3,level)
+fill=envir(4,level)
+adjust=envir(5,level)
+numtyp=envir(6,level)
+lsval=envir(7,level)
+inval=envir(8,level)
+llval=envir(9,level)
+tival=envir(10,level)
+poval=envir(11,level)
+ceval=envir(12,level)
+ulval=envir(13,level)
+do i=1,MAXTABS
+	tabpos(i)=savtab(i,level)
+return
+end
+# savenv - keep environment for later restoration
+
+subroutine savenv
+implicit none
+integer i
+
+include "cenv.i"
+include "cparam.i"
+
+if(level >= MAXENV)
+	return	# out of space for environment
+level=level+1
+envir(1,level)=comchr
+envir(2,level)=tabchr
+envir(3,level)=ubchr
+envir(4,level)=fill
+envir(5,level)=adjust
+envir(6,level)=numtyp
+envir(7,level)=lsval
+envir(8,level)=inval
+envir(9,level)=llval
+envir(10,level)=tival
+envir(11,level)=poval
+envir(12,level)=ceval
+envir(13,level)=ulval
+do i=1,MAXTABS
+	savtab(i,level)=tabpos(i)
+return
+end
+# scopy - copy string at from(i) to to(j)
+
+subroutine scopy(from,i,to,j)
+implicit none
+char from(ARB),to(ARB)
+integer i,j,k1,k2
+
+k2=j
+for(k1=i; from(k1) != EOS; k1=k1+1){
+	to(k2)=from(k1)
+	k2=k2+1
+	}
+to(k2)=EOS
+return
+end
+# set - set parameter and check range
+
+subroutine set(param,val,argtyp,defval,minval,maxval)
+implicit none
+integer max,min
+integer argtyp,defval,maxval,minval,param,val
+
+if(argtyp == NEWLINE)		# defaulted
+	param=defval
+else if(argtyp == PLUS)		# relative +
+	param=param+val
+else if(argtyp == MINUS)	# relative -
+	param=param-val
+else				# absolute
+	param=val
+param=min(param,maxval)
+param=max(param,minval)
+return
+end
+# skip - output n blank lines
+
+subroutine skip(n)
+implicit none
+integer i,n
+
+for(i=1; i <= n; i=i+1)
+	call putc(NEWLINE)
+return
+end
+# skipbl - skip blanks and tabs at lin(i)...
+
+subroutine skipbl(lin,i)
+implicit none
+char lin(ARB)
+integer i
+
+while(lin(i) == BLANK)
+	i=i+1
+return
+end
+# skpage - skip n pages; decrement n
+
+subroutine skpage(n)
+integer n
+
+include "cpage.i"
+
+for(; n > 0; n=n-1){
+	call phead
+	call skip(bottom+1-lineno)
+	lineno=bottom+1
+	call pfoot
+	}
+return
+end
+# spc - space n lines or to bottom of page (cf blnk)
+
+subroutine spc(n)
+implicit none
+integer min
+integer n
+
+include "cpage.i"
+include "cparam.i"
+
+call brk
+if(lineno > bottom)
+	return
+if(lineno == 0)
+	call phead
+call skip(min(n,bottom+1-lineno))
+lineno=lineno+n
+if(lineno > bottom){
+	call pfoot
+	if(skpval > 0)
+		call skpage(skpval)
+	}
+return
+end
+# spread - spread words to justify right margin
+
+subroutine spread(buf,outp,nextra,outwds)
+implicit none
+char buf(ARB)
+integer min
+integer dir,i,j,nb,nex,nextra,nholes,outp,outwds
+
+data dir/0/
+
+if(nextra <= 0 | outwds <= 1)
+	return
+dir=1-dir		# reverse previous direction
+nex=nextra
+nholes=outwds-1
+i=outp-1
+j=min(OUTSIZE-2,i+nex)	 # leave room for newline, eos
+while(i < j){
+	buf(j)=buf(i)
+	if(buf(i) == BLANK){
+		if(dir == 0)
+			nb=(nex-1)/nholes+1
+		else
+			nb=nex/nholes
+		nex=nex-nb
+		nholes=nholes-1
+		for(;nb > 0; nb=nb-1){
+			j=j-1
+			buf(j)=BLANK
+			}
+		}
+	i=i-1
+	j=j-1
+	}
+return
+end
+# tabcol - enters pseudotab stops, checking validity
+
+subroutine tabcol(buf)
+implicit none
+char buf(ARB)
+integer atoi
+integer i,tp,incr,val
+
+include "cparam.i"
+
+i=1
+for(tp=1; tp < MAXTABS; tp = tp+1){
+	while(buf(i) != BLANK & buf(i) != NEWLINE)
+		i=i+1
+	call skipbl(buf,i)
+	if(buf(i) == NEWLINE)
+		break	# end of list
+	if(buf(i) == PLUS){	# relative tab
+		incr=YES
+		i=i+1
+		}
+	else
+		incr=NO
+	val=atoi(buf,i)
+	if(incr == YES & tp > 1)	# relative tab
+		val=tabpos(tp-1) + val
+	tabpos(tp)=val
+	if(val < 0 | (tp > 1 & val < tabpos(tp-1)))
+		tp=tp-1		      # forget this mistake
+	}
+tabpos(tp)=0  # end of list
+return
+end
+# text - process text lines
+
+subroutine text(inbuf)
+implicit none
+char inbuf(ARB),wrdbuf(INSIZE)
+integer getwrd
+integer i
+
+include "cparam.i"
+
+if(litval > 0){
+	call put(inbuf)
+	litval=litval-1
+	return
+	}
+if(inbuf(1) == BLANK | inbuf(1) == NEWLINE)
+	call leadbl(inbuf)	# move left, set tival
+if(ulval > 0){			# underlining
+	call underl(inbuf,wrdbuf,INSIZE)
+	ulval=ulval-1
+	}
+if(ceval > 0){			# centering
+	call center(inbuf)
+	call put(inbuf)
+	ceval=ceval-1
+	}
+else if(inbuf(1) == NEWLINE)	# all blank line
+	call put(inbuf)
+else if(fill == NO)		# unfilled text
+	call put(inbuf)
+else
+	for(i=1; getwrd(inbuf,i,wrdbuf) > 0;)
+		call putwrd(wrdbuf)
+return
+end
+# type - determines type of char
+
+char function type(c)
+implicit none
+char c
+
+type=c
+if((type >= LETA & type <= LETZ) | (type >= BIGA & type <= BIGZ))
+	type=LETTER
+else if(type >= DIG0 & type <= DIG9)
+	type=DIGIT
+return
+end
+# underl - underline a line
+
+subroutine underl(buf,tbuf,size)
+implicit none
+char type
+integer i,j,size
+char buf(size),tbuf(size),c
+
+j=1		# expand into tbuf
+for(i=1; buf(i) != NEWLINE & j < size-1; i=i+1){
+	tbuf(j)=buf(i)
+	j=j+1
+	c=type(buf(i))
+	if(c == LETTER | c == DIGIT){
+		tbuf(j)=BACKSPACE
+		tbuf(j+1)=UNDERLINE
+		j=j+2
+		}
+	}
+tbuf(j)=NEWLINE
+tbuf(j+1)=EOS
+call scopy(tbuf,1,buf,1)	# copy it back to tbuf
+return
+end
+# width - compute width of char string
+
+integer function width(buf)
+implicit none
+char buf(ARB)
+integer i
+
+width=0
+for(i=1; buf(i) != EOS; i=i+1)
+	if(buf(i) == BACKSPACE)
+		width=width-1
+	else if(buf(i) != NEWLINE)
+		width=width+1
+return
+end

@@ -1,0 +1,269 @@
+.bp 1
+.in 0
+.he 'FORMAT (1)'3/12/80'FORMAT (1)'
+.fo ''-#-''
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+format (roff) - format text
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+format [+n] [-n] [-s] [-pon] [files...]
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Format
+formats text according to
+request lines
+embedded in the text of
+the given
+files or standard input if no files are given.
+If nonexistent filenames are encountered they are
+ignored.  The optional flags are as follows:
+.in +5
+.sp
+.ti -5
++n   Start printing at the first page with number "n".
+.sp
+.ti -5
+-n   Stop printing at the first page numbered higher than "n".
+.sp
+.ti -5
+-s   Stop before each page, including the first (useful for
+paper manipulation).
+The prompt "Type return to begin a page" is
+given just once before the first page.
+.sp
+.ti -5
+-pon Move the entire document "n" spaces (default=0) to the right
+("page offset").
+.sp
+.in -5
+Input consists of intermixed text lines,
+which contain information to be
+formatted, and request lines, which contain
+instructions about how to format
+the text lines.
+Request lines begin with a distinguishing "control character", normally
+a period.
+.sp
+Output lines are automatically "filled"; that is, their
+right margins are justified, without regard to the format of
+the input text lines.
+(Right justification may be turned on and off through
+the use of the ".ju" and ".nj" commands, though.)
+Strings of embedded spaces are retained so that the
+output line will contain at least as many spaces between words
+as the input line.
+However, input lines beginning with a space are output without
+modification.
+
+Line "breaks" may be caused at specified places by certain commands,
+or by the
+appearance of an empty input line or an input line
+beginning with a space.
+.sp
+Because of the nature of its output (backspace and tab characters
+and a fixed number of lines per page), it is generally necessary
+to have a tool developed especially for printing the output
+on the local printers.
+On most systems this is a combination of the tools 'os' and
+'detab', plus some sort of page eject control of the printer.
+If such as tool exists, it should be described in Section 3 of
+this manual.
+.sp
+The capabilities of format are specified in the attached
+Request Summary.
+Numerical values are denoted by "n", titles by "t", and single
+characters by "c".
+Numbers may be signed + or -, in which case they signify
+relative changes to a quantity; otherwise they signify an absolute
+setting.
+Missing "n" fields are ordinarily taken to be 1,
+missing "t" fields to be
+empty, and "c" fields to shut off the
+appropriate special interpretation.
+.sp
+Running titles may appear at the top and bottom of every page.
+A title line consists of a line with three distinct fields:
+the first is text to be placed flush with the left margin, the
+second centered, and the third flush with the right margin.
+The first non-blank character in the title will be used as the
+delimiter to separate the three fields.
+Any "#" characters in a title  are replaced by the
+current page number, and
+any "%" characters are replaced by the current date.
+.sp
+The ".nr" defines number registers; there are 26 registers named a-z.
+The command ".nr x m" sets number register x to m; ".nr x +m"
+increments number register by m; and ".nr x -m" decrements x by m.
+The value of number register x is placed in the text by the
+appearance of @@nx; a literal @@ may be inserted using @@@@.
+.sp
+Additional commands may be defined using ".de xx".  For
+example,
+.sp
+.in +3
+.nf
+.cc +
+.de PG
+.sp
+.ti +3
+.en
++cc .
+.in -3
+.sp
+.fi
+defines a "paragraph" command PG.
+Defined commands may also be invoked with arguments.
+Arguments are separated by blanks or tabs.
+Within the
+definition of a defined command, arguments are referenced using
+$1, $2, etc.  There is a maximum of 9 arguments.
+Omitted arguments default to the null string.
+$0 references
+the command name itself.
+For example, the following version of the paragraph command
+uses the argument to determine the amount of indentation.
+.sp
+.in +3
+.nf
+.cc +
+.de PG
+.sp
+.ti +$1
+.en
++cc .
+.in -3
+.sp
+.fi
+This command could be invoked by
+.sp
+.in +3
+.nf
+.cc +
+.PG 3
++cc .
+.in -3
+.sp
+.fi
+to get the same effect as the previous version.
+.sp
+The ".so file" command causes the contents of file to be
+inserted in place of the ".so" command; ".so" commands may be
+nested.
+.sp
+.ti -3
+FILES
+.br
+None
+.sp
+.ti -3
+SEE ALSO
+.br
+Kernighan & Plauger's "Software Tools", pages 219-250
+.br
+whatever tool has been devised for printing formatted output
+.br
+The roff and nroff/troff UNIX commands
+.br
+The "nroff" and "troff" users manuals by Joseph F. Ossana,
+Bell Laboratories, Murray Hill, New Jersey
+.sp
+.ti -3
+DIAGNOSTICS
+.br
+.in +3
+.ti -3
+invalid number register name
+.br
+names of number registers must be a single letter a-z
+
+.ti -3
+missing name in command definition
+.br
+a macro was defined using the '.de' command, but no 2-letter
+name for it was given
+
+.ti -3
+so commands nested too deeply
+.br
+the limit for nesting included source files is dependent upon
+the MAXOFILES definition in the standard symbols definition file
+
+.ti -3
+too many characters pushed back
+.br
+the buffer holding input characters has been exceeded; its size
+is determined by the BUFSIZE definition in the source code
+.in -3
+.sp
+.ti -3
+AUTHORS
+.br
+Original version by Kernighan and Plauger, with modifications by
+David Hanson and friends (U. of Arizona), Joe Sventek
+and Debbie Scherrer (Lawrence Berkeley Laboratory)
+.nf
+.ne 38
+.in 0
+.ce
+.sp
+REQUEST SUMMARY
+.sp
+Request Initial Default Break Meaning
+.sp
+.cc +
+.bd n           n=1     no    boldface the next n lines
+.bp n     n=1   n=+1    yes   begin new page and number it n
+.br                     yes   break
+.cc c     c=.   c=.     no    control character becomes c
+.ce n           n=1     yes   center the next n input lines
+.cu n           n=1     no    continuously underline next n
++ti +30
+input lines
+.de xx                  no     command xx; ends at .en
+.ef t     t=""  t=""    no    foots on even pages are t
+.eh t     t=""  t=""    no    heads on even pages are t
+.en                     no    terminate command definition
+.fi       yes           yes   begin filling output lines
+.fo /l/c/r f="" f=""    no    foot titles are l(eft), c(enter), r(ight)
+.he /l/c/r t="" t=""    no    head title is l(eft), c(enter), r(ight)
+.in n     n=0   n=0     yes   set left margin to column n+1
+.ju       yes   yes     no    begin justifying filled lines
+.ls n     n=1   n=1     no    set line spacing to n
+.m1 n     n=3   n=3     no    space between top of page and head
+.m2 n     n=2   n=2     no    space between head and text
+.m3 n     n=2   n=2     no    space between text and foot
+.m4 n     n=3   n=3     no    space between foot and bottom
+.ne n           n=0     y/n   need n lines; break if new page
+.nf       no            yes   stop filling
+.nj       no            no    stop justifying
+.nr x m   x=0   m=0     no    set number register x to m,
++ti +30
+-m, +m for decrement, increment
+.of t     t=""  t=""    no    foots on odd pages are t
+.oh t     t=""  t=""    no    heads on odd pages are t
+.pl n     n=66  n=66    no    set page length to n lines
+.po n     n=0   n=0     no    set page offset to n spaces
+.rm n     n=65  n=65    no    set right margin to column n
+.so file                no    switch input to file
+.sp n           n=1     yes   space n lines, except at top of page
+.st n           n=0     yes   space to line n from top; -n
++ti +30
+spaces to line n from bottom
+.ti n           n=0     yes   temporarily indent next output
++ti +30
+line n spaces
+.ul n           n=1     no    underline words in the next n
++ti +30
+input lines
++cc .

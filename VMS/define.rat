@@ -1,0 +1,30 @@
+# define - simple string replacement macro processor
+
+character gettok
+character defn(MAXDEF),t,token(MAXTOK)
+integer lookup
+
+include "clookh.i"
+data lastt,namptr/1,MAXPTR*0/
+
+include "cfile.i"
+data ipt,opt/STDIN,STDOUT/
+
+string defnam "define"
+character deftyp(2)
+data deftyp/o374,o0/				# 374 is DEFTYPE in octal
+
+call instal(defnam,deftyp)
+for(t=gettok(token,MAXTOK); t != EOF; t=gettok(token,MAXTOK))
+	if(t != ALPHA)				# output non-alpha tokens
+		call putstr(token)
+	else if(lookup(token,defn) == NO)	# and undefined
+		call putstr(token)
+	else if(defn(1) == DEFTYPE){		# get definition
+		call getdef(token,MAXTOK,defn,MAXDEF)
+		call instal(token,defn)
+		}
+	else
+		call pbstr(defn)		# push replacement onto input
+stop
+end

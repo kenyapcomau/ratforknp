@@ -1,0 +1,196 @@
+.bp 1
+.in 0
+.he 'DC (1)'07/20/80'DC (1)'
+.fo ''-#-''
+.fi
+.in 3
+.ti -3
+NAME
+.br
+dc - desk calculator
+.sp 1
+.ti -3
+SYNOPSIS
+.br
+dc [files ...]
+.sp 1
+.ti -3
+DESCRIPTION
+.br
+DC evaluates integer expressions from the source files,
+one expression per input line.
+If no input files are given, or the filename '-' is specified,
+dc reads from the standard input.
+
+Ordinarily dc operates on decimal integer arithmetic expressions,
+but the user may specify an input base and output base other
+than decimal.
+
+Expressions may be simple arithmetic expressions or
+replacement expressions.
+The values of simple expressions are
+written on standard output when they are evaluated.
+Replacement expressions are used to hold temporary values, and are
+not automatically printed.
+
+A simple expression is a normal arithmetic expression using
+numbers, variables, parentheses, and the following
+operators, listed in order of precedence:
+.in +5
+.nf
++  -          unary plus and negation operators.  These may
+                          only appear at the start of a simple
+                          expression or after a "("
+
+**            exponentiation
+
+*   /   %     multiply, divide, modulo (remainder)
+
++   -         add, subtract
+
+== !=         relations - equals, not equal to,
+>  >=         greater than, greater than or equal to,
+<  <=         less than, less than or equal to
+                       (!=, ^=, ~= all treated as "not equal")
+
+!             unary logical not (also ~ and ^)
+
+|   &         logical or, and
+
+.in -5
+.fi
+The logical operators ! | & and the relational operators result in
+the values 1 for true and 0 for false.
+
+A replacement expression is:
+.sp
+.ce
+name = simple expression
+.sp
+where 'name' is a character string of (virtually) any length,
+starting with a letter and consisting of only letters and digits.
+(The characters a-f should not be considered letters when operating
+in hexadecimal mode.)
+Variables are automatically declared when they first appear to
+the left of an "=" sign,
+and they should not be used in a simple expression until they have
+been declared.
+
+Radix Control
+.br
+.in +5
+Radix control is available in 2 ways:
+.br
+1) There are default radix values for both input and output which
+may be changed by setting the predefined variables 'ibase'
+(input base) and 'obase' (output base).  (Radix 10 is always
+used to evaluate and/or print radix-defining expressions.)
+For example,
+.sp
+.in +10
+ibase = 2
+.br
+obase = 16
+.in -10
+.sp
+would accept input in binary and print results in hexadecimal.
+
+2)  The radix of individual numbers may be explicitly given by
+following the number with an underscore character and then the
+desired radix.
+For example,
+.sp
+.ce
+100_16
+.sp
+would specify the hex number 100 (256 in decimal).
+.in -5
+.sp
+.ti -3
+EXAMPLES
+.br
+.sp
+.nf
+.ti +15
+10 + (-64 / 2**4)
+.br
+would print the answer "6"
+.sp
+.in +15
+.nf
+temp = 101_2
+temp == 5
+.fi
+.in -15
+would print the answer "1" (true)
+
+.nf
+.in +15
+ibase = 16
+obase = 2
+1a + f
+.in -15
+.fi
+would print the answer "101001"
+.sp
+.in +15
+.nf
+ibase = 16
+numa = 100_10
+numb = 100
+numa + numb
+.in -15
+.fi
+would print the answer "356"
+.sp 1
+.ne 2
+.ti -3
+FILES
+.br
+None
+.sp 1
+.ne 3
+.ti -3
+SEE ALSO
+.br
+macro, the UNIX M4 macro package
+.br
+The UNIX tools dc and bc
+.sp 1
+.ne 5
+.ti -3
+DIAGNOSTICS
+.br
+.in +3
+.ti -3
+arith evaluation stack overflow
+.br
+arithmetic expressions have been nested too deeply.
+The size of the stack is set by the MAXSTACK definition
+in the source code.
+
+.ti -3
+number error
+.br
+an input number has a number/character bigger than the current
+radix
+.sp
+.ne 2
+.ti -3
+expression error
+.br
+invalid arithmetic expression
+.in -3
+.sp 1
+.ti -3
+AUTHOR
+.br
+Philip H. Scherrer (Stanford U.)
+.sp 1
+.ti -3
+BUGS/DEFICIENCIES
+.br
+Dc only works with integers
+
+The maximum value allowed depends on the host machine and is the
+largest Fortran integer

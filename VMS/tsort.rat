@@ -1,0 +1,204 @@
+#-h-  tsort.r                    6209  local   12/24/80  15:21:58
+#-h-  tsort                      1315  local   12/24/80  15:15:35
+ ## tsort - symbolic topological sort on symbols
+
+ # include ratdef
+define(MAXBUF,5000)     # storage array
+define(MAXSYMBOL,120)   # maximum symbol size
+# symbol table entries
+define(NEXT,0)          # pointer to next entry
+define(SYMBOL,1)        # pointer to symbol structure
+define(CHARS,2)         # characters in symbol
+# node structure
+define(LINK,0)          # pointer to next node
+define(SUCC,1)          # pointer to successor symbol structure
+define(NODESIZE,2)      # size of node structure
+# symbol structure
+define(NAME,0)          # symbol structure; pointer to name
+define(COUNT,1)         # successor count
+define(TOP,2)           # beginning of successor list
+define(SYMSIZE,3)       # size of symbol structure
+
+DRIVER(tsort)
+
+ integer getarg, open
+ integer i, fd
+ character arg(FILENAMESIZE)
+
+   call query ("usage:  tsort [files].")
+ for (i=1; getarg(i, arg, FILENAMESIZE) != EOF; i=i+1)
+        {
+        if (arg(1) == MINUS & arg(2) == EOS)
+                fd = STDIN
+        else
+                {
+                fd = open(arg, READ)
+                if (fd == ERR)
+                        call cant(arg)
+                }
+        call tpsort (fd)
+        if (fd != STDIN)
+                call close(fd)
+        }
+ if (i == 1)            #read STDIN
+        call tpsort (STDIN)
+ DRETURN
+ end
+#-t-  tsort                      1315  local   12/24/80  15:15:35
+#-h-  entprc                      270  local   12/24/80  15:15:35
+# entprc - enter the relation a < b
+   subroutine entprc(a, b)
+   integer a, b
+   integer p
+   integer nalloc
+   include "ctsort.i"
+
+   buf(b+COUNT) = buf(b+COUNT) + 1
+   p = nalloc(NODESIZE)
+   buf(p+LINK) = buf(a+TOP)
+   buf(p+SUCC) = b
+   buf(a+TOP) = p
+   return
+   end
+#-t-  entprc                      270  local   12/24/80  15:15:35
+#-h-  icopys                      325  local   12/24/80  15:15:35
+ ## icopys - copy integer string at from(i) to char string at to(j)
+    subroutine icopys(from, i, to, j)
+    integer from(ARB)
+    character to(ARB)
+    integer i, j, k1, k2
+
+    k2 = j
+    for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+       to(k2) = from(k1)
+       k2 = k2 + 1
+       }
+    to(k2) = EOS
+    return
+    end
+#-t-  icopys                      325  local   12/24/80  15:15:35
+#-h-  looks                       672  local   12/24/80  15:15:36
+ ## looks - lookup symbol s, insert if necessary
+   integer function looks(s)
+   character s(MAXSYMBOL), lin(MAXSYMBOL)
+   integer i
+   integer length, nalloc, equal, symalc
+   include "ctsort.i"
+
+   for (i = hash(s(1)+1); i > 0; i = buf(i+NEXT))
+      {
+      call icopys (buf, i+CHARS, lin, 1)  # convert from int to char
+      if (equal(s, lin) == YES)                 # got it
+         return (buf(i+SYMBOL))
+     }
+   i = nalloc(CHARS + 1 + length(s) + 1)        # must make new entry
+   buf(i+NEXT) = hash(s(1)+1)   # add onto proper hash chain
+   hash(s(1)+1) = i
+   buf(i+SYMBOL) = symalc(i+CHARS)
+   call scopyi(s, 1, buf, i + CHARS)
+   return (buf(i+SYMBOL))
+   end
+#-t-  looks                       672  local   12/24/80  15:15:36
+#-h-  nalloc                      222  local   12/24/80  15:15:36
+# nalloc - allocate n words in top part of buf
+   integer function nalloc(n)
+   integer n
+   include "ctsort.i"
+
+   nxtfre = nxtfre - n
+   if (nxtfre < nxtsym)
+      call error("out of storage.")
+   return (nxtfre + 1)
+   end
+#-t-  nalloc                      222  local   12/24/80  15:15:36
+#-h-  scopyi                      322  local   12/24/80  15:15:37
+ ## scopyi - copy char string at from(i) to integer string to(j)
+    subroutine scopyi(from, i, to, j)
+    character from(ARB)
+    integer to(ARB)
+    integer i, j, k1, k2
+
+    k2 = j
+    for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+       to(k2) = from(k1)
+       k2 = k2 + 1
+       }
+    to(k2) = EOS
+    return
+    end
+#-t-  scopyi                      322  local   12/24/80  15:15:37
+#-h-  symalc                      308  local   12/24/80  15:15:37
+# symalc - allocate a symbol structure for symbol s
+   integer function symalc(s)
+   integer s
+   integer p
+   include "ctsort.i"
+
+   p = nxtsym
+   nxtsym = nxtsym + SYMSIZE
+   if (nxtsym > nxtfre)
+      call error("out of storage.")
+   buf(p+NAME) = s
+   buf(p+COUNT) = 0
+   buf(p+TOP) = 0
+   return (p)
+   end
+#-t-  symalc                      308  local   12/24/80  15:15:37
+#-h-  tpsort                     1516  local   12/24/80  15:15:37
+ ## tpsort - topological sort file 'fd'
+ subroutine tpsort (fd)
+   character linbuf(MAXLINE), symbuf(MAXSYMBOL)
+   integer i, j, f, r, n, fd
+   integer getwrd, getlin, looks
+   include "ctsort.i"
+
+   nxtsym = 1   # initialize
+   nxtfre = MAXBUF
+   for (i = 1; i <= 128; i = i + 1)
+      hash(i) = 0
+   while (getlin(linbuf, fd) ^= EOF) {
+      i = 1
+      if (getwrd(linbuf, i, symbuf) <= 0)       # ignore blank lines
+         next
+      j = looks(symbuf)
+      while (getwrd(linbuf, i, symbuf) > 0)
+         call entprc(j, looks(symbuf))          # insert a relation
+      }
+   f = 0        # build list of symbols with 0 counts
+   for (i = 1; i < nxtsym & f == 0; i = i + SYMSIZE)    # find first 0
+      if (buf(i+COUNT) == 0)
+         f = i
+   for (r = f; i < nxtsym; i = i + SYMSIZE)     # find rest of 0 counts
+      if (buf(i+COUNT) == 0) {
+         buf(r+COUNT) = i
+         r = i
+         }
+   n = nxtsym   # will be 0 if non-circular
+   for (; f > 0; f = buf(f+COUNT)) {    # print in topological order
+#      call putlin(buf(buf(f+NAME)), STDOUT)
+       call icopys (buf, buf(f+NAME), linbuf, 1)
+       call putlin(linbuf, STDOUT)
+      call putch(NEWLINE, STDOUT)
+      for (i = buf(f+TOP); i > 0; i = buf(i+LINK)) {
+         j = buf(i+SUCC)
+         buf(j+COUNT) = buf(j+COUNT) - 1
+         if (buf(j+COUNT) == 0) {       # add more onto list
+            buf(r+COUNT) = j
+            r = j
+            }
+         }
+      n = n - SYMSIZE
+      }
+   if (n > 1)
+      call error("circular.")
+   return
+   end
+#-t-  tpsort                     1516  local   12/24/80  15:15:37
+#-h-  usage                        71  local   12/24/80  15:15:38
+ subroutine usage
+
+ call error ("usage:  tsort [files].")
+ return
+ end
+#-t-  usage                        71  local   12/24/80  15:15:38
+#-t-  tsort.r                    6209  local   12/24/80  15:21:58

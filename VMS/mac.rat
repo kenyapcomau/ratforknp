@@ -1,0 +1,1233 @@
+define(character,byte)
+define(STDIN,5)
+define(STDOUT,6)
+define(STDERR,7)
+define(ARB,*)
+define(NO,0)
+define(YES,1)
+define(NULL,0)
+define(MAXCARD,80)
+define(MAXLINE,81)
+define(MAXTOK,80)
+define(MAXDEF,80)
+define(BUFSIZ,100)
+define(ARGSIZE,20)
+define(CALLSIZE,20)
+define(EVALSIZE,1000)
+define(MAXPTR,199)
+define(MAXTBL,2000)
+define(EOF,-1)
+define(EOS,0)
+define(TAB,9)
+define(NEWLINE,10)
+define(BLANK,32)
+define(DOLLAR,36)
+define(LPAREN,40)
+define(RPAREN,41)
+define(COMMA,44)
+define(MINUS,45)
+define(DIG0,48)
+define(DIG9,57)
+define(LETA,65)
+define(LETZ,90)
+define(BIGA,97)
+define(BIGZ,122)
+define(LBRACK,91)
+define(RBRACK,93)
+define(DIGIT,DIG0)
+define(ALPHA,LETA)
+define(LETTER,LETA)
+define(DEFTYPE,-4)
+define(INCTYPE,-5)
+define(SUBTYPE,-6)
+define(IFTYPE,-7)
+define(TEMPTYPE,-8)
+define(LENTYPE,-9)
+define(IFDTYPE,-10)
+define(INDTYPE,-11)
+define(EVTYPE,-12)
+define(DNLTYPE,-13)
+define(CQTYPE,-14)
+define(UNDTYPE,-15)
+define(ARGFLAG,DOLLAR)
+
+# macro - expand macros with arguments
+
+implicit none
+character gettok
+character defn(MAXDEF),token(MAXTOK),t
+integer lookup,push
+integer ap,argstk(ARGSIZE),callst(CALLSIZE),nlb,plev(CALLSIZE)
+
+include "clookh.i"
+data lastt,namptr/1,MAXPTR*0/
+
+include "cmacro.i"
+
+string balp "()"
+string defnam "define"
+string incnam "incr"
+string subnam "substr"
+string ifnam "ifelse"
+string temnam "mktemp"
+string lennam "strlen"
+string ifdnam "ifdef"
+string indnam "index"
+string evnam "eval"
+string dnlnam "dnl"
+string cqnam "changequote"
+string undnam "undefine"
+
+character deftyp(2),inctyp(2),subtyp(2),iftyp(2),temtyp(2),lentyp(2),ifdtyp(2)
+character indtyp(2),evtyp(2),dnltyp(2),cqtyp(2),undtyp(2)
+data deftyp/DEFTYPE,EOS/
+data inctyp/INCTYPE,EOS/
+data subtyp/SUBTYPE,EOS/
+data iftyp/IFTYPE,EOS/
+data temtyp/TEMPTYPE,EOS/
+data lentyp/LENTYPE,EOS/
+data ifdtyp/IFDTYPE,EOS/
+data indtyp/INDTYPE,EOS/
+data evtyp/EVTYPE,EOS/
+data dnltyp/DNLTYPE,EOS/
+data cqtyp/CQTYPE,EOS/
+data undtyp/UNDTYPE,EOS/
+
+open(STDOUT,status='new',carriagecontrol='list')
+lquote=LBRACK
+rquote=RBRACK
+call instal(defnam,deftyp)
+call instal(incnam,inctyp)
+call instal(subnam,subtyp)
+call instal(ifnam,iftyp)
+call instal(temnam,temtyp)
+call instal(lennam,lentyp)
+call instal(ifdnam,ifdtyp)
+call instal(indnam,indtyp)
+call instal(evnam,evtyp)
+call instal(dnlnam,dnltyp)
+call instal(cqnam,cqtyp)
+call instal(undnam,undtyp)
+cp=0
+ap=1
+ep=1
+for(t=gettok(token,MAXTOK); t != EOF; t=gettok(token,MAXTOK)){
+	if(t == ALPHA){
+		if(lookup(token,defn) == NO)
+			call puttok(token)
+		else{		# defined; put it in eval stack
+			cp=cp+1
+			if(cp > CALLSIZE)
+				call error('Call stack overflow.')
+			callst(cp)=ap
+			ap=push(ep,argstk,ap)
+			call puttok(defn)	# stack definition
+			call putchr(EOS)
+			ap=push(ep,argstk,ap)
+			call puttok(token)	# stack name
+			call putchr(EOS)
+			ap=push(ep,argstk,ap)
+			t=gettok(token,MAXTOK)	# peek at next
+			call pbstr(token)
+			if(t != LPAREN)		# add () if not present
+				call pbstr(balp)
+			plev(cp)=0
+			}
+		}
+	else if(t == lquote){		# strip one level of []
+		nlb=1
+		repeat{
+			t=gettok(token,MAXTOK)
+			if(t == lquote)
+				nlb=nlb+1
+			else if(t == rquote){
+				nlb=nlb-1
+				if(nlb == 0)
+					break
+				}
+			else if(t == EOF)
+				call error('EOF in string.')
+			call puttok(token)
+			}
+		}
+	else if(cp == 0)		# not in a macro at all
+		call puttok(token)
+	else if(t == LPAREN){
+		if(plev(cp) > 0)
+			call puttok(token)
+		plev(cp)=plev(cp)+1
+		}
+	else if(t == RPAREN){
+		plev(cp)=plev(cp)-1
+		if(plev(cp) > 0)
+			call puttok(token)
+		else{			# end of argument list
+			call putchr(EOS)
+			call eval(argstk,callst(cp),ap-1)
+			ap=callst(cp)	# pop eval stack
+			ep=argstk(ap)
+			cp=cp-1
+			}
+		}
+	else if(t == COMMA & plev(cp) == 1){	# new arg
+		call putchr(EOS)
+		ap=push(ep,argstk,ap)
+		}
+	else
+		call puttok(token)	# just stack it
+	}
+if(cp != 0)
+	call error('Unexpected EOF.')
+end
+
+# amatch - match lin(i) with pat
+
+integer function amatch(lin,i,pat)
+implicit none
+character lin(ARB),pat(ARB)
+integer i,j,k
+
+k=i
+for(j=1; pat(j) != EOS; j=j+1)
+	if(pat(j) != lin(k))
+		return(0)
+	else
+		k=k+1
+return(i)
+end
+
+# docq - change left and right quotes
+
+subroutine docq(argstk,i,j)
+implicit none
+integer a2,a3,argstk(ARGSIZE),i,j
+
+include "cmacro.i"
+
+if(j-i > 2){
+	a2=argstk(i+2)
+	a3=argstk(i+3)
+	if(evalst(a2) != EOS & evalst(a3) != EOS){
+		lquote=evalst(a2)
+		rquote=evalst(a3)
+		return
+		}
+	}
+lquote=LBRACK
+rquote=RBRACK
+return
+end
+
+# dodef - install definition in table
+
+subroutine dodef(argstk,i,j)
+implicit none
+integer a2,a3,argstk(ARGSIZE),i,j
+
+include "cmacro.i"
+
+if(j-i > 2){
+	a2=argstk(i+2)
+	a3=argstk(i+3)
+	call instal(evalst(a2),evalst(a3))	# subarrays
+	}
+return
+end
+
+# dodnl - delete characters up to a newline
+
+subroutine dodnl
+implicit none
+character ngetc,c
+
+while(ngetc(c) != NEWLINE)
+	;
+return
+end
+
+# doeval - evaluate arithmetic expression
+
+subroutine doeval(argstk,i,j)
+implicit none
+integer yypars
+integer a2,argstk(ARGSIZE),i,j
+character line
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+include "cmacro.i"
+
+a2=argstk(i+2)
+call scopy(evalst,a2,line,1)
+lpos=1
+if(yypars(1) != 0)
+	return		# error in expression
+call pbnum(exval)
+return
+end
+
+# doif - select one of two arguments
+
+subroutine doif(argstk,i,j)
+implicit none
+integer equal
+integer a2,a3,a4,a5,argstk(ARGSIZE),i,j
+
+include "cmacro.i"
+
+if(j-i < 5)
+	return
+a2=argstk(i+2)
+a3=argstk(i+3)
+a4=argstk(i+4)
+a5=argstk(i+5)
+if(equal(evalst(a2),evalst(a3)) == YES)		# subarrays
+	call pbstr(evalst(a4))
+else
+	call pbstr(evalst(a5))
+return
+end
+
+# doifdf - select 2nd or 3rd arg depending on whether 1st arg is defined
+
+subroutine doifdf(argstk,i,j)
+implicit none
+character defn(MAXDEF)
+integer lookup
+integer a2,a3,a4,argstk(ARGSIZE),i,j
+
+include "cmacro.i"
+
+if(j-i < 4)
+	return
+a2=argstk(i+2)
+a3=argstk(i+3)
+a4=argstk(i+4)
+if(lookup(evalst(a2),defn) == YES)		# subarrays
+	call pbstr(evalst(a3))
+else
+	call pbstr(evalst(a4))
+return
+end
+
+# doincr - increment argument by 1
+
+subroutine doincr(argstk,i,j)
+implicit none
+integer ctoi
+integer argstk(ARGSIZE),i,j,k
+
+include "cmacro.i"
+
+k=argstk(i+2)
+call pbnum(ctoi(evalst,k)+1)
+return
+end
+
+# doind - return index of pattern in string
+
+subroutine doind(argstk,i,j)
+implicit none
+integer a2,a3,argstk(ARGSIZE),i,j
+integer match
+
+include "cmacro.i"
+
+if(j-i < 3)
+	return
+a2=argstk(i+2)
+a3=argstk(i+3)
+call pbnum(match(evalst(a2),evalst(a3)))	# subarrays
+return
+end
+
+# dolen - return length of string
+
+subroutine dolen(argstk,i,j)
+implicit none
+integer length
+integer argstk(ARGSIZE),i,j,k
+
+include "cmacro.i"
+
+k=argstk(i+2)
+call pbnum(length(evalst(k)))
+return
+end
+
+# dosub - select substring
+
+subroutine dosub(argstk,i,j)
+implicit none
+integer ctoi,length,max,min
+integer ap,argstk(ARGSIZE),fc,i,j,k,nc
+
+include "cmacro.i"
+
+if(j-i < 3)
+	return
+if(j-i < 4)
+	nc=MAXTOK
+else{
+	k=argstk(i+4)
+	nc=ctoi(evalst,k)	# number of characters
+	}
+k=argstk(i+3)			# origin
+ap=argstk(i+2)			# target string
+fc=ap+ctoi(evalst,k)-1		# first char of substring
+if(fc >= ap & fc < ap+length(evalst(ap))){	# subarrays
+	k=fc+min(nc,length(evalst(fc)))-1
+	for(; k >= fc; k=k-1)
+		call putbak(evalst(k))
+	}
+return
+end
+
+# dotemp - make unique identifier
+
+subroutine dotemp(argstk,i,j)
+implicit none
+integer argstk(ARGSIZE),i,j,k
+integer number
+
+include "cmacro.i"
+
+data number/1/
+
+k=argstk(i+2)
+call pbnum(number)
+number=number+1
+call pbstr(evalst(k))
+return
+end
+
+# dound - remove defined token
+
+subroutine dound(argstk,i,j)
+implicit none
+integer hashs
+integer a2,argstk(ARGSIZE),i,j
+integer k,n,ptr
+
+include "cmacro.i"
+include "clookh.i"
+
+if(j-i < 2)
+	return
+a2=argstk(i+2)
+ptr=hashs(evalst(a2),MAXPTR)+1	# subarray
+n=0
+while(namptr(ptr)>0){
+	j=namptr(ptr)
+	for(k=a2;evalst(k)==table(j) & evalst(k)!=EOS;k=k+1)
+		j=j+1
+	if(evalst(k)==table(j)){	# got one
+		namptr(ptr)= -1
+		return
+		}
+	ptr=ptr+1
+	if(ptr>MAXPTR)
+		ptr=1
+	n=n+1
+	if(n>=MAXPTR)
+		break
+	}
+return
+end
+
+# eval - expand args i through j; evaluate builtin or push back defn
+
+subroutine eval(argstk,i,j)
+implicit none
+integer length
+integer argno,argstk(ARGSIZE),i,j,k,m,n,t,td
+
+include "cmacro.i"
+
+t=argstk(i)
+td=evalst(t)
+if(td == DEFTYPE)
+	call dodef(argstk,i,j)
+else if(td == INCTYPE)
+	call doincr(argstk,i,j)
+else if(td == SUBTYPE)
+	call dosub(argstk,i,j)
+else if(td == IFTYPE)
+	call doif(argstk,i,j)
+else if(td == TEMPTYPE)
+	call dotemp(argstk,i,j)
+else if(td == LENTYPE)
+	call dolen(argstk,i,j)
+else if(td == IFDTYPE)
+	call doifdf(argstk,i,j)
+else if(td == INDTYPE)
+	call doind(argstk,i,j)
+else if(td == EVTYPE)
+	call doeval(argstk,i,j)
+else if(td == DNLTYPE)
+	call dodnl
+else if(td == CQTYPE)
+	call docq(argstk,i,j)
+else if(td == UNDTYPE)
+	call dound(argstk,i,j)
+else{
+	for(k=t+length(evalst(t))-1; k > t; k=k-1)
+		if(evalst(k-1) != ARGFLAG)
+			call putbak(evalst(k))
+		else{
+			argno=evalst(k)-DIG0
+			if(argno >= 0 & argno < j-1){
+				n=i+argno+1
+				m=argstk(n)
+				call pbstr(evalst(m))
+				}
+			k=k-1		# skip over $
+			}
+	if(k == t)			# do last character
+		call putbak(evalst(k))
+	}
+return
+end
+
+# getc - gets characters from input file
+
+character function getc(c)
+implicit none
+character buf(MAXCARD),c
+integer i,lastc
+
+data lastc/0/
+data buf/MAXCARD*EOS/
+
+lastc=lastc+1
+if(buf(lastc) == EOS){
+	read(STDIN,9050,end=10)lastc,(buf(i),i=1,MAXCARD)
+	9050 format(q,MAXCARD a1)
+	lastc=min(lastc+1,MAXCARD)
+	buf(lastc)=NEWLINE
+	buf(lastc+1)=EOS
+	lastc=1
+	}
+c=buf(lastc)
+getc=c
+return
+
+10 c=EOF
+getc=EOF
+return
+end
+
+# getdef - get name and definition
+
+subroutine getdef(token,toksiz,defn,defsiz)
+implicit none
+integer defsiz,toksiz
+character defn(defsiz),token(toksiz),c
+integer nlpar,i
+character gettok,ngetc
+
+if(ngetc(c)!=LPAREN)
+	call error('Missing left parenthesis.')
+else if(gettok(token,toksiz)!=ALPHA)
+	call error('Non-alphanumeric name.')
+else if(ngetc(c)!=COMMA)
+	call error('Missing comma in define.')
+# else got (name
+nlpar=0
+for(i=1; nlpar>=0; i=i+1)
+	if(i>defsiz)
+		call error('Definition too long.')
+	else if(ngetc(defn(i))==EOF)
+		call error('Missing right parenthesis.')
+	else if(defn(i)==LPAREN)
+		nlpar=nlpar+1
+	else if(defn(i)==RPAREN)
+		nlpar=nlpar-1
+	# else normal character in defn(i)
+defn(i-1)=EOS
+return
+end
+
+# gettok - get alphanumeric string or single non-alpha for define
+
+character function gettok(token,toksiz)
+implicit none
+integer toksiz,i
+character token(toksiz),c
+character ngetc,type
+
+for(i=1; i<toksiz; i=i+1){
+	gettok=type(ngetc(token(i)))
+	if(gettok!=LETTER & gettok!=DIGIT)
+		break
+	}
+if(i>=toksiz)
+	call error('Token too long.')
+if(i>1){			# some alpha was seen
+	call putbak(token(i))	# went one too far
+	i=i-1
+	gettok=ALPHA
+	}
+# else single character token
+token(i+1)=EOS
+return
+end
+
+# instal - add name and definition to table (hash version)
+
+subroutine instal(name,defn)
+implicit none
+character name(MAXTOK),defn(MAXDEF)
+integer equal,length,hashs
+integer dlen,nlen,ptr,n
+
+include "clookh.i"
+
+nlen=length(name)+1
+dlen=length(defn)+1
+if(lastt+nlen+dlen > MAXTBL)
+	call error('Too many definitions.')
+ptr=hashs(name,MAXPTR)+1
+n=0
+while(namptr(ptr)>0){
+	if(equal(name,table(namptr(ptr))) == YES)	# redefine old name
+		break
+	ptr=ptr+1
+	if(ptr>MAXPTR)
+		ptr=1
+	n=n+1
+	if(n>=MAXPTR)
+		call error('Hash table overflow.')
+	}
+namptr(ptr)=lastt
+call scopy(name,1,table,lastt)
+call scopy(defn,1,table,lastt+nlen)
+lastt=lastt+nlen+dlen
+return
+end
+
+# lookup - locate name, extract definiton from table (hash version)
+
+integer function lookup(name,defn)
+implicit none
+integer hashs
+character defn(MAXDEF),name(MAXTOK)
+integer j,k,n,ptr
+
+include "clookh.i"
+
+ptr=hashs(name,MAXPTR)+1
+n=0
+while(namptr(ptr)>0){
+	j=namptr(ptr)
+	for(k=1;name(k)==table(j) & name(k)!=EOS;k=k+1)
+		j=j+1
+	if(name(k)==table(j)){	# got one
+		call scopy(table,j+1,defn,1)
+		lookup=YES
+		return
+		}
+	ptr=ptr+1
+	if(ptr>MAXPTR)
+		ptr=1
+	n=n+1
+	if(n>=MAXPTR)
+		break
+	}
+lookup=NO
+return
+end
+
+# ngetc - get a (possibly pushed back) character
+
+character function ngetc(c)
+implicit none
+character getc
+character c
+
+include "cdefio.i"
+
+if(bp>0)
+	c=buf(bp)
+else{
+	bp=1
+	buf(bp)=getc(c)
+	}
+bp=bp-1
+ngetc=c
+return
+end
+
+# pbnum - convert number to string, push back on input
+
+subroutine pbnum(n)
+implicit none
+integer iabs,mod
+integer m,n,num,neg
+string digits "0123456789"
+
+neg=NO
+if(n < 0)
+	neg=YES
+num=iabs(n)
+repeat{
+	m=mod(num,10)
+	call putbak(digits(m+1))
+	num=num/10
+	}until(num == 0)
+if(neg == YES)
+	call putbak(MINUS)
+return
+end
+
+# pbstr - push string back onto input
+
+subroutine pbstr(in)
+implicit none
+character in(MAXLINE)
+integer length
+integer i
+
+for(i=length(in); i>0; i=i-1)
+	call putbak(in(i))
+return
+end
+
+# push - push ep onto argstk, return new pointer ap
+
+integer function push(ep,argstk,ap)
+implicit none
+integer ap,argstk(ARGSIZE),ep
+
+if(ap > ARGSIZE)
+	call error('Arg stack overflow.')
+argstk(ap)=ep
+push=ap+1
+return
+end
+
+# putbak - push character back onto input
+
+subroutine putbak(c)
+implicit none
+character c
+
+include "cdefio.i"
+
+bp=bp+1
+if(bp>BUFSIZ)
+	call error('Too many characters pushed back.')
+buf(bp)=c
+return
+end
+
+# putc - puts character on output unit
+
+subroutine putc(c)
+implicit none
+character buf(MAXLINE),c
+integer i,lastc
+
+data lastc/0/
+
+if(lastc>=MAXLINE | c==NEWLINE){
+	if(lastc > 0)
+		write(STDOUT,9060)(buf(i),i=1,lastc)
+	9060 format(MAXCARD a1)
+	lastc=0
+	}
+if(c==NEWLINE)
+	return
+lastc=lastc+1
+buf(lastc)=c
+return
+end
+
+# putchr - put single char on output or into evaluation stack
+
+subroutine putchr(c)
+character c
+
+include "cmacro.i"
+
+if(cp == 0)
+	call putc(c)
+else{
+	if(ep > EVALSIZE)
+		call error('Evaluation stack overflow.')
+	evalst(ep)=c
+	ep=ep+1
+	}
+return
+end
+
+# puttok - put a token either on output or into evaluation stack
+
+subroutine puttok(str)
+character str(ARB)
+integer i
+
+for(i=1; str(i) != EOS; i=i+1)
+	call putchr(str(i))
+return
+end
+
+# yyparse - expression evaluator
+
+define(DIGITS,257)
+define(LPAREN,40)
+define(RPAREN,41)
+define(BAR,124)
+define(AMPER,38)
+define(EXCLAIM,33)
+define(GREATER,62)
+define(GE,264)
+define(LESS,60)
+define(LE,266)
+define(NE,267)
+define(EQUALS,61)
+define(PLUS,43)
+define(MINUS,45)
+define(STAR,42)
+define(SLASH,47)
+define(PERCENT,37)
+define(CARET,94)
+define(UMINUS,275)
+define(yyerrok,yyerrf = 0)
+define(yyclearin,yychar = -1)
+
+subroutine yyactr(yyprdn)
+common/yycomn/yylval,yyval,yypv,yyvalv(150)
+common/yylcom/yychar,yyerrf,yydebu
+integer yychar, yyerrf, yydebu
+integer yyprdn,yyval,yylval,yypv,yyvalv
+integer mod
+integer i
+character line
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+goto 1000
+
+1 { exval = yyvalv(yypv+1) } return
+2 { exval = 0 } return
+3 { yyval=0; if(yyvalv(yypv+1) != 0 | yyvalv(yypv+3) != 0)yyval=1 } return
+4 { yyval=0; if(yyvalv(yypv+1) != 0 & yyvalv(yypv+3) != 0)yyval=1 } return
+5 { yyval=0; if(yyvalv(yypv+2) == 0)yyval=1 } return
+6 { yyval=0; if(yyvalv(yypv+1) == yyvalv(yypv+3))yyval=1 } return
+7 { yyval=0; if(yyvalv(yypv+1) != yyvalv(yypv+3))yyval=1 } return
+8 { yyval=0; if(yyvalv(yypv+1) > yyvalv(yypv+3))yyval=1 } return
+9 { yyval=0; if(yyvalv(yypv+1) >= yyvalv(yypv+3))yyval=1 } return
+10 { yyval=0; if(yyvalv(yypv+1) < yyvalv(yypv+3))yyval=1 } return
+11 { yyval=0; if(yyvalv(yypv+1) <= yyvalv(yypv+3))yyval=1 } return
+12 { yyval = (yyvalv(yypv+1)+yyvalv(yypv+3)) } return
+13 { yyval = (yyvalv(yypv+1)-yyvalv(yypv+3)) } return
+14 { yyval = (yyvalv(yypv+1)*yyvalv(yypv+3)) } return
+15 { yyval = (yyvalv(yypv+1)/yyvalv(yypv+3)) } return
+16 { yyval = mod(yyvalv(yypv+1),yyvalv(yypv+3)) } return
+17 { yyval = (yyvalv(yypv+2)) } return
+18 { yyval=1;
+	for(i=1; i <= yyvalv(yypv+3); i=i+1)
+		yyval=yyval*yyvalv(yypv+1) }
+	return
+19 { yyval = -yyvalv(yypv+2) } return
+20 { yyval = yyvalv(yypv+2) } return
+21 { yyval = exval } return
+1000 goto(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,999),yyprdn
+999 return
+end
+
+define(YYERRCODE,256)
+
+integer function yylex
+implicit none
+character c
+character line
+integer peek
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+while(line(lpos) == BLANK | line(lpos) == TAB | line(lpos) == NEWLINE)
+	lpos=lpos+1
+c=line(lpos)
+lpos=lpos+1
+if(c == NULL | c == PLUS | c == MINUS | c == STAR | c == SLASH | c == PERCENT
+	| c == CARET | c == LPAREN | c == RPAREN)
+	return(c)
+if(c == GREATER)
+	return(peek(EQUALS, GE, GREATER))
+if(c == LESS)
+	return(peek(EQUALS, LE, LESS))
+if(c == EQUALS)
+	return(peek(EQUALS, EQUALS, EQUALS))
+if(c == BAR)
+	return(peek(BAR, BAR, BAR))
+if(c == AMPER)
+	return(peek(AMPER, AMPER, AMPER))
+if(c == EXCLAIM)
+	return(peek(EQUALS, NE, EXCLAIM))
+lpos=lpos-1
+exval = 0
+while(line(lpos) >= DIG0 & line(lpos) <= DIG9){
+	exval=exval*10+line(lpos)-DIG0
+	lpos=lpos+1
+	}
+return(DIGITS)
+end
+
+integer function peek(c, r1, r2)
+implicit none
+integer c, r1, r2
+character line
+integer exval,lpos
+common /clex/exval,lpos,line(MAXLINE)
+
+if(line(lpos) != c)
+	return(r2)
+lpos=lpos+1
+return(r1)
+end
+
+integer function yyerro
+implicit none
+return
+end
+
+integer function yyexcp(s, c)
+implicit none
+integer s, c
+if(s == 1){
+if(c == 0) yyexcp= -1
+else yyexcp = 0
+return
+}
+if(s == 28){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 6
+return
+}
+if(s == 29){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 7
+return
+}
+if(s == 30){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 8
+return
+}
+if(s == 31){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 9
+return
+}
+if(s == 32){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 10
+return
+}
+if(s == 33){
+if(c == 62
+| c == 264
+| c == 60
+| c == 266
+| c == 267
+| c == 61)yyexcp=0
+else yyexcp = 11
+return
+}
+return
+end
+
+integer function yypars(yyargu)
+implicit none
+
+define(YYLAST,279)
+
+common /yycomn/ yylval, yyval, yypv, yyvalv(150)
+common /yylcom/ yychar, yyerrf, yydebu
+integer yyval, yypv, yylval, yychar, yydebu, yynerr, yystat, yyargu
+integer yylex, yyexcp, yys(150), yyerrf, yyvalv, yyn, yyj
+integer yyact(279)
+integer yypact(41)
+integer yypgo(3)
+integer yyr1(23)
+integer yyr2(23)
+integer yychk(41)
+integer yydef(41)
+
+data yyact/20,   9,  21,   1,  40,  18,  16,   0,  17,   0,
+  19,  20,   9,   0,   0,   0,  18,  16,   0,  17,
+   0,  19,  20,  14,  10,  12,   0,  18,  16,   0,
+  17,   0,  19,   0,  14,  10,  12,  20,   9,   3,
+   0,   0,  18,  16,   0,  17,   4,  19,  20,   6,
+   0,   5,   0,  18,  16,   0,  17,  21,  19,  20,
+  14,  10,  12,   0,  18,   0,   0,   0,  21,  19,
+   0,  14,  10,  12,   0,   0,   0,   0,   0,  21,
+   0,   0,   0,   0,   0,   0,   0,   8,   0,   0,
+   0,   0,   0,   0,  21,   0,   0,   0,   8,   0,
+   0,   0,   0,   0,   0,  21,   0,   0,   2,   0,
+   0,   0,  22,  23,  24,  25,  21,  26,  27,  28,
+  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,
+  39,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,  13,   0,  15,
+  11,   0,   0,   0,   0,   0,   0,   0,  13,   0,
+  15,  11,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   0,   7,  13,   0,  15,  11,   0,   0,
+   0,   0,   0,   0,   0,  13,   0,  15,  11/
+
+data yypact/6,-2000, -26,   6,   6,   6,   6,-1000,   6,   6,
+   6,   6,   6,   6,   6,   6,   6,   6,   6,   6,
+   6,   6,  11, -37,-1000,-1000,   0,  11, -15, -15,
+ -15, -15, -15, -15,  22,  22, -92, -92, -92, -92,
+-1000/
+
+data yypgo/0,   3, 108/
+
+data yyr1/0,   1,   1,   2,   2,   2,   2,   2,   2,   2,
+   2,   2,   2,   2,   2,   2,   2,   2,   2,   2,
+   2,   2,  -1/
+
+data yyr2/0,   1,   0,   3,   3,   2,   3,   3,   3,   3,
+   3,   3,   3,   3,   3,   3,   3,   3,   3,   2,
+   2,   1,  -1/
+
+data yychk/0,  -1,  -2,  33,  40,  45,  43, 257, 124,  38,
+  61, 267,  62, 264,  60, 266,  43,  45,  42,  47,
+  37,  94,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,
+  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,
+  41/
+
+data yydef/2,  -2,   1,   0,   0,   0,   0,  21,   0,   0,
+   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+   0,   0,   5,   0,  19,  20,   3,   4,  -2,  -2,
+  -2,  -2,  -2,  -2,  12,  13,  14,  15,  16,  18,
+  17/
+
+yystat = 0
+yychar = -1
+yynerr = 0
+yyerrf = 0
+yypv = 0
+
+100
+yypv = yypv + 1
+yys(yypv) = yystat
+yyvalv(yypv) = yyval
+
+200
+yyn = yypact(yystat+1)
+if(yyn <= (-1000)){
+	if(yyn == (-2000)){
+		if(yychar < 0) yychar = yylex(yylval)
+		}
+	goto 500
+	}
+if(yychar < 0) yychar = yylex(yylval)
+yyn = yyn + yychar
+if(yyn < 0 | yyn >= YYLAST) goto 500
+yyn = yyact(yyn+1)
+if(yychk(yyn+1) == yychar){
+	yychar = -1
+	yyval = yylval
+	yystat = yyn
+	if(yyerrf > 0) yyerrf = yyerrf - 1
+	goto 100
+	}
+
+500
+yyn = yydef(yystat+1)
+if(yyn == (-2)) yyn = yyexcp(yystat, yychar)
+if(yyn == (-1)){
+	yypars = 0
+	return
+	}
+if(yyn == 0){
+	if(yyerrf == 3){
+		if(yychar == (-1)){
+			yypars = 1
+			return
+			}
+		yychar = -1
+		goto 200
+		}
+	if(yyerrf == 0) yynerr = yynerr + 1	# new error
+	yyerrf = 3
+	# find a state where error is a legal shift
+	while(yypv >= 1){
+		yyn = yys(yypv)
+		yyn = yypact(yyn+1) + YYERRCODE
+		if(yyn >= 0 & yyn < YYLAST){
+			yyn = yyact(yyn+1)
+			if(yychk(yyn+1) == YYERRCODE){
+				yystat = yyn
+				goto 100
+				}
+			}
+		yypv = yypv - 1
+		}
+	yypars = 1
+	return
+	}
+yypv = yypv - yyr2(yyn+1)
+yyval = yyvalv(yypv+1)
+call yyactr(yyn)
+yyn = yyr1(yyn+1)
+yyj = yypgo(yyn+1) + yys(yypv) +2
+if(yyj > YYLAST) goto 899
+yystat = yyact(yyj)
+if(yychk(yystat+1) != (-yyn)){
+	899 yyn = yypgo(yyn+1)
+	yystat = yyact(yyn+1)
+	}
+goto 100
+end
+
+# ctoi - convert string at in(i) to integer, increment i
+
+integer function ctoi(in, i)
+character in (ARB)
+integer i
+integer d
+
+while (in (i) == BLANK | in (i) == TAB)
+	i = i + 1
+for (ctoi = 0; in (i) != EOS; i = i + 1) {
+	d = zext(in (i)) - DIG0	# ASCII only!
+	if (d < 0 | d > 9)	# non-digit
+		break
+	ctoi = 10 * ctoi + d - 1
+	}
+return
+end
+
+# equal - compare str1 to str2; return YES if equal, NO if not
+
+integer function equal(str1,str2)
+implicit none
+character str1(ARB),str2(ARB)
+integer i
+
+for(i=1; str1(i)==str2(i); i=i+1)
+	if(str1(i)==EOS){
+		equal=YES
+		return
+		}
+equal=NO
+return
+end
+
+# hashs - hash a string integer number from 0 to tabsiz-1
+
+integer function hashs(s,tabsiz)
+implicit none
+character s(ARB)
+integer i,tabsiz
+
+hashs=0
+for(i=1; s(i)!=EOS; i=i+1)
+	hashs=mod(hashs*2+s(i),tabsiz)
+return
+end
+
+# length - compute length of string
+
+integer function length(str)
+implicit none
+character str(ARB)
+
+for(length=0; str(length+1)!=EOS; length=length+1)
+	;
+return
+end
+
+# scopy - copy string at from(i) to to(j)
+
+subroutine scopy(from,i,to,j)
+implicit none
+character from(ARB),to(ARB)
+integer i,j,k1,k2
+
+k2=j
+for(k1=i; from(k1)!=EOS; k1=k1+1){
+	to(k2)=from(k1)
+	k2=k2+1
+	}
+to(k2)=EOS
+return
+end
+
+# type - returns type of character
+
+character function type(c)
+implicit none
+character c
+
+type=c
+if((type>=LETA & type<=LETZ) | (type>=BIGA & type<=BIGZ))
+	type=LETTER
+else if(type>=DIG0 & type<=DIG9)
+	type=DIGIT
+return
+end
+
+# match - find match anywhere on line
+
+integer function match(lin, pat)
+implicit none
+character lin(ARB), pat(ARB)
+integer amatch
+integer i
+
+for (i = 1; lin(i) != EOS; i = i + 1)
+	if (amatch(lin, i, pat) > 0) {
+		match = YES
+		return
+		}
+match = NO
+return
+end
+
+# error - prints error message then terminates program
+
+subroutine error(str)
+implicit none
+CHARACTER*(*) str
+
+write(STDERR,'(a)')str
+call exit
+end

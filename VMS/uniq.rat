@@ -1,0 +1,79 @@
+#-h-  uniq.r                     2130  local   12/24/80  15:22:15
+#-h-  uniq                        834  local   12/24/80  15:21:40
+ ## uniq -strip adjacent duplicate lines
+ DRIVER(uniq)
+ character buf(MAXLINE)
+ integer open, getarg
+ integer i, int, count
+
+ data count /NO/
+
+ call query ("usage:  uniq [-c] [file].")
+ for (i=1; getarg(i, buf, MAXLINE) != EOF; i=i+1)
+        {
+        if (buf(1) == MINUS & (buf(2) == LETC | buf(2) == BIGC))
+                {
+                count = YES
+                next
+                }
+        else if (buf(1) == MINUS & buf(2) == EOS)
+                int = STDIN
+        else
+                {
+                int = open(buf,READ)
+                if (int == ERR)
+                        call cant(buf)
+                }
+        call unik (int, count)
+        if (int != STDIN)
+                call close(int)
+        }
+
+ if (i == 1 | (i == 2 & count == YES))  #read from STDIN
+        call unik (STDIN, count)
+ DRETURN
+ end
+#-t-  uniq                        834  local   12/24/80  15:21:40
+#-h-  unik                       1032  local   12/24/80  15:21:41
+ ## unik   - locate duplicate lines in file int
+ subroutine unik (int, count)
+ integer equal, getlin
+ integer t, count, k
+ character buf1(MAXLINE), buf2(MAXLINE)
+
+ t = getlin(buf1, int)
+ while (t != EOF)
+        {
+        k = 1
+        for (t=getlin(buf2,int); t!= EOF; t=getlin(buf2,int))
+                {
+                if (equal(buf1, buf2) == NO)
+                        break
+                k = k + 1
+                }
+        if (count == YES)
+                {
+                call putdec(k, 5)
+                call putc(BLANK)
+                }
+        call putlin(buf1, STDOUT)
+        if (t == EOF)
+                break
+        k = 1
+        for (t=getlin(buf1,int); t!= EOF; t=getlin(buf1,int))
+                {
+                if (equal(buf1,buf2) == NO)
+                        break
+                k = k + 1
+                }
+        if (count == YES)
+                {
+                call putdec(k, 5)
+                call putc(BLANK)
+                }
+        call putlin(buf2, STDOUT)
+        }
+ return
+ end
+#-t-  unik                       1032  local   12/24/80  15:21:41
+#-t-  uniq.r                     2130  local   12/24/80  15:22:15

@@ -1,0 +1,481 @@
+.de sh
+.sp 2
+.ul
+..
+.de pp
+.sp
+.ti +5
+..
+.de p1
+.sp
+.nf
+..
+.de p2
+.sp
+.fi
+..
+.he 'Macro''User Documentation'
+.fo ''- % -''
+.sh
+Introduction
+.pp
+The basic operation of Macro
+is to copy its input to its output.
+As the input is read, however, each alphanumeric 'token'
+(that is, string of letters and digits) is checked.
+If it is the name of a macro,
+then the name of the macro is replaced by its defining text,
+and the resulting string is pushed back onto the
+input to be rescanned.
+Macros may be called with arguments, in which case the arguments are collected
+and substituted into the right places in the defining text
+before it is rescanned.
+.pp
+Macro provides a collection of about eleven built-in
+macros
+which perform various useful operations;
+in addition, the user can define new macros.
+Built-ins and user-defined macros work exactly the same way, except that
+some of the built-in macros have side effects
+on the state of the process.
+.sh
+Defining macros
+.pp
+The primary built-in function of Macro
+is
+.ul
+define,
+which is used to define new macros.
+The input
+.p1
+define(name,stuff)
+.p2
+causes the string
+.ul
+name
+to be defined as
+.ul
+stuff.
+All subsequent occurrences of
+.ul
+name
+will be replaced by
+.ul
+stuff.
+.ul
+name
+must be alphanumeric and must begin with a letter.
+.ul
+stuff
+is any text that contains balanced parentheses;
+it may stretch over multiple lines.
+.pp
+Thus, as a typical example,
+.p1
+define(n,100)
+ ...
+if (i > n)
+.p2
+defines
+.ul
+n
+to be 100, and uses this 'symbolic constant' in a later
+.ul
+if
+statement.
+.pp
+The left parenthesis must immediately follow the word
+.ul
+define,
+to signal that
+.ul
+define
+has arguments.
+If a macro or built-in name is not followed immediately by '(',
+it is assumed to have no arguments.
+This is the situation for
+.ul
+n
+above;
+it is actually a macro with no arguments,
+and thus when it is used there need be no (...) following it.
+.pp
+You should also notice that a macro name is only recognized as such
+if it appears surrounded by non-alphanumerics.
+For example, in
+.p1
+define(n,100)
+ ...
+if (nnn > 100)
+.p2
+The variable
+.ul
+nnn
+is absolutely unrelated to the defined macro
+.ul
+n,
+even though it contains a lot of
+.ul
+n 's.
+.pp
+Things may be defined in terms of other things.
+for example,
+.p1
+define(n,100)
+define(m,n)
+.p2
+defines both m and n to be 100.
+.pp
+What happens if
+.ul
+n
+is redefined?
+Or, to say it another way, is
+.ul
+m
+defined as
+.ul
+n
+or as 100?
+In Macro,
+the former is true -
+.ul
+m
+is n, if
+.ul
+n
+subsequently changes, so does
+.ul
+m.
+.pp
+This behavior arises because
+Macro expands macro names into their defining text
+as late as it possibly can.
+.sh
+Quoting
+.pp
+It is possible to delay the expansion of arguments by
+.ul
+quoting
+them.
+Any text surrounded by the quote marks [ and ]
+is not expanded immediately, but has the quotes stripped off.
+The general rule is that Macro always strips off
+one level of single quotes whenever it evaluates
+something.
+This is true even outside of
+macros.
+if you want the word
+.ul
+define
+to appear in the output,
+you have to quote it in the input,
+as in
+.p1
+	[define] = 1;
+.p2
+.pp
+If [ and ] are not convenient for some reason,
+the quote characters can be changed with the built-in
+.ul
+changequote:
+.p1
+changequote(<,>)
+.p2
+makes the new quote characters the left and right angle brackets.
+You can restore the original characters with just
+.p1
+changequote
+.p2
+.pp
+There are two additional built-ins related to
+.ul
+define.
+.ul
+undefine
+removes the definition of some macro or built-in:
+.p1
+undefine([n])
+.p2
+removes the definition of
+.ul
+n.
+(why are the quotes absolutely necessary?)
+Built-ins can be removed with
+.ul
+undefine,
+as in
+.p1
+undefine([define])
+.p2
+but once you remove one, you can never get it back.
+.pp
+The built-in
+.ul
+ifdef
+provides a way to determine if a macro is currently defined.
+.p1
+ifdef([cyber],[define(wordsize,60)])
+ifdef([pdp],[define(wordsize,16)])
+.p2
+makes a definition appropriate for the particular machine.
+Don't forget the quotes!
+.pp
+.ul
+Ifdef
+actually permits three arguments;
+if the name is undefined, the value of
+.ul
+ifdef
+is then the third argument, as in
+.p1
+.p1
+ifdef([cyber],on cyber,not on cyber)
+.p2
+.sh
+Arguments
+.pp
+So far we have discussed the simplest form of macro processing -
+replacing one string by another (fixed) string.
+User-defined macros may also have arguments, so different invocations
+can have different results.
+Within the replacement text for a macro
+(the second argument of its
+.ul
+define)
+any occurrence of
+.ul
+$n
+will be replaced by the
+.ul
+n'th
+argument when the macro
+is actually used.
+Thus, the macro
+.ul
+bump,
+defined as
+.p1
+define(bump,$1 = $1 + 1)
+.p2
+generates code to increment its argument by 1:
+.p1
+bump(x)
+.p2
+is
+.p1
+x = x + 1
+.p2
+.pp
+A macro can have as many arguments as you want,
+but only the first nine are accessible,
+through
+.ul
+$1
+to
+.ul
+$9.
+(the macro name itself is
+.ul
+$0,
+although that is less commonly used.)
+Arguments that are not supplied are replaced by null strings,
+so
+we can define a macro
+.ul
+cat
+which simply concatenates its arguments, like this:
+.p1
+define(cat,$1$2$3$4$5$6$7$8$9)
+.p2
+thus
+.p1
+cat(x,y,z)
+.p2
+is equivalent to
+.p1
+xyz
+.p2
+.ul
+$4
+through
+.ul
+$9
+are null, since no corresponding arguments were provided.
+.pp
+Arguments are separated by commas, but parentheses are counted properly,
+so a comma 'protected' by parentheses does not terminate an argument.
+that is, in
+.p1
+define(a,(b,c))
+.p2
+there are only two arguments;
+the second is literally
+.ul
+(b,c).
+and of course a bare comma or parenthesis can be inserted by quoting it.
+.sh
+Arithmetic built-ins
+.pp
+Macro provides one built-in function for doing arithmetic
+on integers (only).
+This is
+.ul
+incr,
+which increments its numeric argument by 1.
+Thus to handle the common programming situation
+where you want a variable to be defined as 'one more than n',
+write
+.p1
+define(n,100)
+define(n1,[incr(n)])
+.p2
+then
+.ul
+n1
+is defined as one more than the current value of
+.ul
+n.
+.sh
+Conditionals
+.pp
+There is a built-in called
+.ul
+ifelse
+which enables you to perform arbitrary conditional testing.
+in the simplest form,
+.p1
+ifelse(a,b,c)
+.p2
+compares the two strings
+.ul
+a
+and
+.ul
+b.
+If these are identical,
+.ul
+ifelse
+returns
+the string
+.ul
+c;
+otherwise it returns
+.ul
+d.
+Thus we might define a macro called
+.ul
+compare
+which compares two strings and returns 'yes' or 'no'
+if they are the same or different.
+.p1
+define(compare,[ifelse($1,$2,yes,no)])
+.p2
+Note the quotes,
+which prevent too-early evaluation of
+.ul
+ifelse.
+.sh
+String manipulation
+.pp
+The built-in
+.ul
+strlen
+returns the length of the string that makes up its argument.
+Thus
+.p1
+strlen(abcdef)
+.p2
+is 6, and
+.ul
+strlen((a,b))
+is 5.
+.pp
+The built-in
+.ul
+substr
+can be used to produce substrings of strings.
+.ul
+Substr(s,i,n)
+returns the substring of
+.ul
+s
+that starts at the
+.ul
+i'th
+position
+(origin one),
+and is
+.ul
+n
+characters long.
+If
+.ul
+n
+is omitted, the rest of the string is returned,
+so
+.p1
+substr([now is the time],2)
+.p2
+is
+.p1
+ow is the time
+.p2
+if
+.ul
+i
+or
+.ul
+n
+are out of range, various sensible things happen.
+.pp
+.ul
+Index(s1,s2)
+returns the index (position) in
+.ul
+s1
+where the string
+.ul
+s2
+occurs, or 0
+if it doesn't occur.
+as with
+.ul
+substr,
+the origin for strings is 1.
+.pp
+To facilitate making unique labels, the built-in
+.ul
+mktemp
+is provided, by
+.p1
+mktemp(arg)
+.p2
+a unique numeric string is appended to the given argument.
+.pp
+There is also a built-in called
+.ul
+dnl
+which deletes all characters that follow it up to
+and including the next newline;
+it is useful mainly for throwing away
+empty lines that otherwise tend to clutter up Macro output.
+for example, if you say
+.p1
+define(n,100)
+define(m,200)
+define(l,300)
+.p2
+the newline at the end of each line is not part of the definition,
+so it is copied into the output, where it may not be wanted.
+If you add
+.ul
+dnl
+to each of these lines, the newlines will disappear.
+.sh
+References
+.pp
+[1] B. W. Kernighan and P. J. Plauger,
+.ul
+Software Tools,
+Addison-Wesley, Inc., 1976.

@@ -1,0 +1,109 @@
+.bp 1
+.in 0
+.he 'SPLIT (1)'10/30/78'SPLIT (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+split - split a file
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+split -n | +from [-to] file [name]
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Split splits a file into a number of small files.
+Depending on the arguments, "file" is split into n-line pieces
+or according to specified patterns.  If "file" is omitted or
+is "-", split reads the standard input.
+.sp
+Normally, split outputs the pieces of "file" into files
+named "xaa", "xab", "xac", ..., "xzz".  This convention
+permits upto 676 files.  If "file" requires more than
+676 files to be split, the rest of "file" is placed in "xzz".
+If the "name" argument is given, it is used as the prefix
+for the output file names.  For each output file,
+the 2-character sequence (e.g. "aa", "ab", etc.) is appended
+to "name" and the result is used as the output file.
+Note that "file" must be given in order to specify "name".
+.sp
+To split "file" into n-line pieces, use
+.sp
+.in +3
+.nf
+split -n file [name]
+.in -3
+.sp
+.fi
+If n is omitted, 100 is assumed.
+.sp
+The command
+.sp
+.in +3
+.nf
+split +from file [name]
+.in -3
+.sp
+.fi
+splits "file" into pieces that begin with the pattern "from".
+The command
+.sp
+.in +3
+.nf
+split +from -to file [name]
+.in -3
+.sp
+.fi
+splits "file" into pieces that begin with the pattern "from"
+and end with the "to".  Note that in this case, portions
+of "file" may not appear in the output files.
+For example, the command
+.sp
+.in +3
+.nf
+split +subroutine -end foo
+.in -3
+.sp
+.fi
+might be used to extract the subroutines from foo.
+.sp
+The "from" and "to" patterns may be any regular expression
+pattern as described in edit.
+.fi
+.sp
+.ne 2
+.ti -3
+SEE ALSO
+.br
+change, edit, find, lam
+.fi
+.sp
+.ne 2
+.ti -3
+DIAGNOSTICS
+.br
+bad argument
+.br
+.in +3
+The value of "n" is invalid.
+.in -3
+.sp
+illegal from pattern
+.br
+illegal to pattern
+.br
+.in +3
+The specification for the indicated pattern is invalid.
+.in -3
+.sp
+.ti -3
+AUTHORS
+.br
+David Hanson and friends (U. of Arizona)

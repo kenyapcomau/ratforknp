@@ -1,0 +1,101 @@
+#-h-  wc.r                       2955  local   12/24/80  15:29:23
+#-h-  wc                         1684  local   12/24/80  15:26:47
+# wc - count lines, words, and characters in named files or STDIN
+DRIVER(wc)
+   character arg(MAXLINE)
+   integer open, getarg
+   integer fd, i, j, words, lines, chars, nfiles
+   integer nl, nw, nc, tl, tw, tc
+   string total "total"
+   data words /YES/, lines /YES/, chars /YES/   # -lwc is default
+   data tl /0/, tw /0/, tc /0/
+
+   call query ("usage:  wc [-lwc] [files].")
+   for (i = 1; getarg(i, arg, MAXNAME) ^= EOF; i = i + 1)
+      if (arg(1) == MINUS & arg(2) ^= EOS) {
+         lines = NO
+         words = NO
+         chars = NO
+         for (j = 2; arg(j) ^= EOS; j = j + 1)
+            if (arg(j) == LETL | arg(j) == BIGL)
+               lines = YES
+            else if (arg(j) == LETW | arg(j) == BIGW)
+               words = YES
+            else if (arg(j) == LETC | arg(j) == BIGC)
+               chars = YES
+            else
+               call error("usage: wc [-lwc] files.")
+         }
+      else {
+         nfiles = nfiles + 1
+         if (arg(1) == MINUS)
+            fd = STDIN
+         else
+            fd = open(arg, READ)
+         if (fd == ERR) {
+            call putlin(arg, ERROUT)
+            call remark(": can't open.")
+            }
+         else {
+            call dowc(fd, nl, nw, nc)
+            call printc(arg, nl, nw, nc, lines, words, chars)
+            tl = tl + nl
+            tw = tw + nw
+            tc = tc + nc
+            if (fd ^= STDIN)
+               call close(fd)
+            }
+         }
+   if (nfiles == 0) {   # no args, do STDIN
+      call dowc(STDIN, nl, nw, nc)
+      call printc(EOS, nl, nw, nc, lines, words, chars)
+      }
+   else if (nfiles > 1)
+      call printc(total, tl, tw, tc, lines, words, chars)
+   DRETURN
+   end
+#-t-  wc                         1684  local   12/24/80  15:26:47
+#-h-  dowc                        484  local   12/24/80  15:26:47
+# dowc - count lines, words, and characters in fd
+   subroutine dowc(fd, nl, nw, nc)
+   integer fd, nl, nw, nc
+   character getch
+   character c
+   integer inword
+
+   nl = 0
+   nw = 0
+   nc = 0
+   inword = NO
+   while (getch(c, fd) ^= EOF) {
+      nc = nc + 1
+      if (c == NEWLINE)
+         nl = nl + 1
+      if (c == BLANK | c == NEWLINE | c == TAB)
+         inword = NO
+      else if (inword == NO) {
+         inword = YES
+         nw = nw + 1
+         }
+      }
+   return
+   end
+#-t-  dowc                        484  local   12/24/80  15:26:47
+#-h-  printc                      391  local   12/24/80  15:26:48
+# printc - print count statistics for arg
+   subroutine printc(arg, nl, nw, nc, lines, words, chars)
+   character arg(ARB)
+   integer nl, nw, nc, lines, words, chars
+   if (lines == YES)
+      call putdec(nl, 8)
+   if (words == YES)
+      call putdec(nw, 8)
+   if (chars == YES)
+      call putdec(nc, 8)
+   call putc(BLANK)
+   call putlin(arg, STDOUT)
+   call putc(NEWLINE)
+   return
+   end
+#-t-  printc                      391  local   12/24/80  15:26:48
+#-t-  wc.r                       2955  local   12/24/80  15:29:23

@@ -1,0 +1,64 @@
+.de s3
+.sp 1
+..
+.he 'Diff''User documentation'
+.fo ''- % -''
+.sp
+Diff
+finds a minimal set of differences between two files.
+the output consists of zero (for identical files)
+or more 'ed' directives of the form
+.sp
+.in +5
+.nf
+l1(,l2) command l3(,l4)
+< text lines from file1
+(---)
+(> text lines from file2)
+.fi
+.in -5
+.sp
+where l1 (and l2) are line numbers from file1 and
+l3 (and l4) are line numbers from file2.
+the command is either 'a', 'c' or 'd',
+meaning append, change to, or delete.
+The parentheses indicate that the appearence of that
+part is optional.
+.s3
+By way of example, some sample inputs and outputs are shown.
+.sp
+.in +5
+.nf
+(file1)
+Twinkle, twinkle little star
+.sp
+(file2)
+Twinkle, twinkle little star
+How I wonder what you are
+.sp
+(output)
+1a2
+> How I wonder what you are
+.sp 2
+(file1)
+Twinkle, twinkle little star
+.sp
+(file2)
+Twinkle, twinkle little bat
+.sp
+(output)
+1c1
+< Twinkle, twinkle little star
+---
+> Twinkle, twinkle little bat
+.sp 2
+(file1)
+Twinkle, twinkle little bat
+How I wonder what you're at
+.sp
+(file2)
+Twinkle, twinkle little bat
+.sp
+(output)
+2d1
+< How I wonder what you're at

@@ -1,0 +1,48 @@
+#-h-  show.doc                    861  local   12/14/80  23:49:43
+.bp 1
+.in 0
+.he 'SHOW (1)'7/1/79'SHOW (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+show - show all characters in a file
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+show [files ...]
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Show copies the named files to the standard output,
+replacing control characters by "^c", where c is the ascii
+character used to enter the control character when
+depressing the "control" key on most terminals.
+More precisely, c is the ascii character whose
+value is 100 (octal) plus the value of the control
+character.
+.sp
+Control characters are those ascii characters with
+values between 0 and 31, inclusive.  Newline characters
+are displayed as usual, however.
+.sp
+If no filenames are given, or the name '-' is specified,
+show will read from the standard input.
+.fi
+.sp
+.ne 2
+.ti -3
+SEE ALSO
+.br
+cat, page
+.sp
+.ti -3
+AUTHORS
+.br
+David Hanson and friends (U. of Arizona)

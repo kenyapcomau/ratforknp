@@ -1,0 +1,617 @@
+#
+#		three-body regularization program
+#		*********************************
+#
+#	the method is described in aarseth & zare, celestial mechanics 10,185
+#
+implicit  real*8(a-h,m,o-z)
+#	declare m as a real variable if implicit statement is removed.
+common dt0,tol0,deltat,tcrit,time,q(8),p(8),r,r1,r2,energy,m(3),x(3,3),
+	xdot(3,3),c11,c12,c19,c20,c24,c25,nsteps,name(3),nrj
+dimension  y(17),f(17),f1(17),f2(17),f3(17),f4(17),f5(17),f6(17),f7(17),save(6)
+#
+external qderiv
+#	name of derivative routine required by the runge-kutta integrator.
+#
+#	        list of common variables
+#
+#	---------------------------------------------------------------------
+#	c11     inverse mass factor for qderiv (also c12,c19,c20,c24,c25).
+#	deltat  approximate output time interval.
+#	dt0     initial integration step in regularized time units.
+#	energy  twice the initial total energy.
+#	m       particle mass.
+#	name    particle identity (initialized to 1,2,3).
+#	nrj     number of rejected steps in the integrator.
+#	nsteps  total number of integration steps.
+#	p       regularized momenta.
+#	q       regularized coordinates.
+#	r       distance between m(1) and m(2).
+#	r1      distance between m(1) and m(3).
+#	r2      distance between m(2) and m(3).
+#	tcrit   exact termination time (reached by iteration).
+#	time    physical time in scaled units.
+#	tol0    absolute tolerance for runge-kutta integrator.
+#	x       particle coordinates (note that x(i,3) is the z-component).
+#	xdot    velocity components (xdot(i,3) is z-component).
+#	---------------------------------------------------------------------
+#
+#	read input parameters and specify initial conditions.
+call data
+irun = 0
+repeat {
+#	control variable for time reversal test.
+	r12min = 100.0
+	rmin = 100.0
+	nsteps = 0
+	nrj = 0
+	nreg = 0
+	iend = 0
+#	control variable for the final time iteration.
+	h = dt0
+	tol = tol0
+	tnext = deltat
+#	next output time to the nearest step.
+	time = 0.0d0
+#	initialize the regularized time.
+	tau = 0.0d0
+#	specify the number of first-order equations for rk integrator.
+	n = 17
+#	compute initial energy and transform to regularized variables.
+	if (irun==0)
+		call transf(1)
+#	initialize the input vector for rk integrator.
+	do k = 1,8 {
+		y(k) = q(k)
+		y(k+8) = p(k)
+		}
+	y(17) = 0.0d0
+#	obtain initial output after transformation to physical variables.
+	if (irun==0)
+		call transf(2)
+	repeat {
+#	call the runge-kutta integrator for next step.
+#
+		call rk78(i,tau,h,y,f,f1,f2,f3,f4,f5,f6,f7,n,tol,qderiv)
+#
+#	set current regularized coordinates and momenta in common variables.
+		do k = 1,8 {
+			q(k) = y(k)
+			p(k) = y(k+8)
+			}
+		time = y(17)
+		if (iend<=0) {
+#	set minimum two-body separations (only used for output).
+			if (r<rmin)
+				rmin = r
+			if (r1<r12min)
+				r12min = r1
+			if (r2<r12min)
+				r12min = r2
+			nrj = nrj+i
+			nsteps = nsteps+1
+#	see whether switching of reference body is desirable.
+			if (r<=r1&&r<=r2) {
+				imin = 1
+#	use a simple distance test to determine new reference body imin.
+				if (r2<1.00001*r1)
+					imin = 2
+#	transform to physical variables and rename the exchanged particles.
+				call transf(3)
+				do k = 1,3 {
+					save(k) = x(3,k)
+					save(k+3) = xdot(3,k)
+					x(3,k) = x(imin,k)
+					xdot(3,k) = xdot(imin,k)
+					x(imin,k) = save(k)
+					xdot(imin,k) = save(k+3)
+					}
+				save(1) = m(3)
+				m(3) = m(imin)
+				m(imin) = save(1)
+				name3 = name(3)
+				name(3) = name(imin)
+				name(imin) = name3
+#	transform back to regularized variables and initialize rk input.
+				call transf(4)
+				do k = 1,8 {
+					y(k) = q(k)
+					y(k+8) = p(k)
+					}
+#	update regularization counter at the end of switching procedure.
+				nreg = nreg+1
+				}
+			if (time<tnext)
+				next 1
+			if (time<=tcrit) {
+#	obtain current output and see whether to continue the calculation.
+				call transf(2)
+				tnext = tnext+deltat
+				if (time<tcrit)
+					next 1
+				}
+			}
+		if (dabs(time-tcrit)<1.0e-13)
+			break 1
+#	guess the next regularized time step for iteration to time=tcrit.
+		h = (tcrit-time)/(r1*r2)
+		iend = iend+1
+#	include safety test on the number of iterations.
+		if (iend>5)
+			break 1
+		}
+	call transf(2)
+	dt = time-tcrit
+	write(6,10)nreg,rmin,r12min,dt,iend
+#     if (irun.eq.0)  stop
+	if (irun>0)
+		break 1
+#	alternative termination criterion for time reversal test.
+	tcrit = time
+	do k = 1,8
+		p(k) = -p(k)
+	irun = irun+1
+	}
+stop
+10  format('0'//,20x,' nreg =',i3,'     minimum r =',1pe9 .1,
+	'    minimum r1 or r2 =',e9 .1,'    dt =',e9 .1,'    iend =',0pi3)
+end
+
+subroutine data
+implicit  real*8(a-h,m,o-z)
+common dt0,tol0,deltat,tcrit,time,q(8),p(8),r,r1,r2,energy,m(3),x(3,3),
+	xdot(3,3),c11,c12,c19,c20,c24,c25,nsteps,name(3),nrj
+dimension  sum(7)
+#
+#	read integration parameters.
+read(5,20)dt0,tol0,deltat,tcrit
+do k = 1,7
+	sum(k) = 0.0d0
+#	read initial conditions (one card for each body).
+do i = 1,3
+	read(5,30)m(i),(x(i,k),k = 1,3),(xdot(i,k),k = 1,3)
+do i = 1,3 {
+	sum(7) = sum(7)+m(i)
+	do k = 1,3 {
+		sum(k) = sum(k)+m(i)*x(i,k)
+		sum(k+3) = sum(k+3)+m(i)*xdot(i,k)
+		}
+	}
+#	initialize name and express coordinates and velocities in c.m. frame.
+do i = 1,3 {
+	name(i) = i
+	do k = 1,3 {
+		x(i,k) = x(i,k)-sum(k)/sum(7)
+		xdot(i,k) = xdot(i,k)-sum(k+3)/sum(7)
+		}
+	}
+write(6,40)dt0,tol0,deltat,tcrit,(m(k),k = 1,3)
+return
+20  format(8e10 .1)
+30  format(7f10 .5)
+40  format('0'//,10x,1p7e12 .1)
+end
+
+subroutine transf(kdum)
+implicit  real*8(a-h,m,o-z)
+common  dt0,tol0,deltat,tcrit,time,q(8),p(8),r,r1,r2,energy,m(3),x(3,3),
+	xdot(3,3),c11,c12,c19,c20,c24,c25,nsteps,name(3),nrj
+dimension  a(3,3),p2(9),q2(9),q1(9),p1(9)
+#
+switch(kdum) {
+	case 1:
+		zke = 0.0d0
+		pot = 0.0d0
+		do i = 1,3 {
+			zke = zke+0.5d0*m(i)*(xdot(i,1)**2+xdot(i,2)**2+xdot(i,3)**2)
+			do j = 1,3
+				if (j>i)
+					pot = pot-m(i)*m(j)/dsqrt(
+						(x(i,1)-x(j,1))**2+
+						(x(i,2)-x(j,2))**2+
+						(x(i,3)-x(j,3))**2)
+			}
+		energy = zke+pot
+#	store twice the initial energy in common to save time in qderiv.
+		energy = 2.0d0*energy
+	case 2,3:
+#
+#	this part transforms regularized variables to physical variables.
+		k = 0
+		repeat {
+			q1(k+1) = q(k+1)**2-q(k+2)**2-q(k+3)**2+q(k+4)**2
+			q1(k+2) = 2.d0*(q(k+1)*q(k+2)-q(k+3)*q(k+4))
+			q1(k+3) = 2.d0*(q(k+1)*q(k+3)+q(k+2)*q(k+4))
+#	relative coordinates (equation (52)).
+			p1(k+1) = q(k+1)*p(k+1)-q(k+2)*p(k+2)-
+				q(k+3)*p(k+3)+q(k+4)*p(k+4)
+			p1(k+2) = q(k+2)*p(k+1)+q(k+1)*p(k+2)-
+				q(k+4)*p(k+3)-q(k+3)*p(k+4)
+			p1(k+3) = q(k+3)*p(k+1)+q(k+4)*p(k+2)+
+				q(k+1)*p(k+3)+q(k+2)*p(k+4)
+#	the factor 2 in the transpose matrix is included below.
+			rk = q(k+1)**2+q(k+2)**2+q(k+3)**2+q(k+4)**2
+			dk = 4.0d0*rk
+			p1(k+1) = 2.0d0*p1(k+1)/dk
+			p1(k+2) = 2.0d0*p1(k+2)/dk
+			p1(k+3) = 2.0d0*p1(k+3)/dk
+#	absolute momenta (equation (53)).
+			if (k>0)
+				break 1
+			k = 4
+			}
+#
+		do k = 1,3 {
+			q1(k+3) = q1(k+4)
+			p1(k+3) = p1(k+4)
+			}
+#	re-labelled relative coordinates and momenta (equation (54)).
+		do k = 1,3 {
+			q2(k+6) = -(m(1)*q1(k)+m(2)*q1(k+3))/(m(1)+m(2)+m(3))
+#	physical coordinates of m(3) (first equation (55)).
+			q2(k) = q1(k)+q2(k+6)
+			q2(k+3) = q1(k+3)+q2(k+6)
+			p2(k) = p1(k)
+			p2(k+3) = p1(k+3)
+			p2(k+6) = -(p2(k)+p2(k+3))
+			}
+#	physical coordinates and momenta in c.m. frame (equation (55)).
+		do i = 1,3
+			do k = 1,3 {
+				i1 = 3*i+k-3
+				x(i,k) = q2(i1)
+				xdot(i,k) = p2(i1)/m(i)
+				}
+#	individual coordinates and velocities in the c.m. frame.
+		if (kdum!=3) {
+#
+#	this part is for output only.
+			s1 = p2(1)**2+p2(2)**2+p2(3)**2
+			s2 = p2(4)**2+p2(5)**2+p2(6)**2
+			s3 = p2(7)**2+p2(8)**2+p2(9)**2
+			zke = 0.5d0*(s1/m(1)+s2/m(2)+s3/m(3))
+			s1 = m(1)*m(3)/dsqrt((q2(7)-q2(1))**2+
+				(q2(8)-q2(2))**2+(q2(9)-q2(3))**2)
+			s2 = m(2)*m(3)/dsqrt((q2(7)-q2(4))**2+
+				(q2(8)-q2(5))**2+(q2(9)-q2(6))**2)
+			s3 = m(1)*m(2)/dsqrt((q2(4)-q2(1))**2+
+				(q2(5)-q2(2))**2+(q2(6)-q2(3))**2)
+			ht = zke-s1-s2-s3
+#	current total energy computed from physical variables.
+			dh = (ht-0.5d0*energy)/(0.5d0*energy)
+#	relative energy error with respect to initial value.
+			write(6,50)time,ht,dh,nsteps,nrj
+			do i = 1,3
+				write(6,60)name(i),m(i),(x(i,k),k = 1,3),
+					(xdot(i,k),k = 1,3)
+			}
+		return
+	case 4:
+	}
+#	first part transforms physical variables to regularized variables.
+do i = 1,3
+#	obtain physical momenta and coordinates.
+	do k = 1,3 {
+		i1 = 3*i+k-3
+		p1(i1) = m(i)*xdot(i,k)
+		q1(i1) = x(i,k)
+		}
+#	set mass factors for routine qderiv to save time.
+c11 = 0.25d0/m(1)+0.25d0/m(3)
+c12 = 0.25d0/m(2)+0.25d0/m(3)
+c19 = 2.0d0*m(2)*m(3)
+c20 = 2.0d0*m(1)*m(3)
+c24 = 0.25d0/m(3)
+c25 = 2.0d0*m(1)*m(2)
+#	obtain relative coordinates and absolute momenta (equation (45)).
+do k = 1,3 {
+	p2(k+3) = p1(k+3)
+	q2(k) = q1(k)-q1(k+6)
+	q2(k+3) = q1(k+3)-q1(k+6)
+	}
+#	expand the variables by re-labelling (equation (46)).
+do k = 1,3 {
+	q1(k) = q2(k)
+	p1(k+4) = p2(k+3)
+	q1(k+4) = q2(k+3)
+	}
+#	initialize the redundant variables (equation (47)).
+q1(4) = 0.0d0
+q1(8) = 0.0d0
+p1(4) = 0.0d0
+p1(8) = 0.0d0
+k = 0
+repeat {
+#	perform the first ks transformation.
+	rk = dsqrt(q1(k+1)**2+q1(k+2)**2+q1(k+3)**2)
+	if (q1(k+1)>0.0) {
+#	set ks coordinates for positive q1 (equation (49)).
+		q(k+1) = dsqrt(0.5d0*(rk+q1(k+1)))
+		q(k+2) = 0.5d0*q1(k+2)/q(k+1)
+		q(k+3) = 0.5d0*q1(k+3)/q(k+1)
+		q(k+4) = 0.0d0
+		}
+	else {
+#	set ks coordinates for negative q1 (equation (48)).
+		q(k+2) = dsqrt(0.5d0*(rk-q1(k+1)))
+		q(k+1) = 0.5d0*q1(k+2)/q(k+2)
+		q(k+4) = 0.5d0*q1(k+3)/q(k+2)
+		q(k+3) = 0.0d0
+		}
+#	set regularized momenta (equation (50)).
+	p(k+1) = 2.d0*(+q(k+1)*p1(k+1)+q(k+2)*p1(k+2)+q(k+3)*p1(k+3))
+	p(k+2) = 2.d0*(-q(k+2)*p1(k+1)+q(k+1)*p1(k+2)+q(k+4)*p1(k+3))
+	p(k+3) = 2.d0*(-q(k+3)*p1(k+1)-q(k+4)*p1(k+2)+q(k+1)*p1(k+3))
+	p(k+4) = 2.d0*(+q(k+4)*p1(k+1)-q(k+3)*p1(k+2)+q(k+2)*p1(k+3))
+	if (k>0)
+		break 1
+#
+	k = 4
+	}
+return
+50  format('0',f30 .15,f15 .10,e15 .2,2i10)
+60  format('0',10x,i3,f8 .2,3x,3f17 .12,3x,3f15 .10)
+end
+
+subroutine qderiv(q,p,t,qpr,ppr,tpr)
+implicit  real*8(a-h,m,o-z)
+common  dt0,tol0,deltat,tcrit,time,v(8),w(8),r,r1,r2,energy,m(3),x(3,3),
+	xdot(3,3),c11,c12,c19,c20,c24,c25,nsteps,name(3),nrj
+#	note that common locations of q and p are replaced by dummy variables
+dimension  q(8),p(8),qpr(8),ppr(8),s2(8),s5(8),s8(8)
+#
+r1 = q(1)*q(1)+q(2)*q(2)+q(3)*q(3)+q(4)*q(4)
+r2 = q(5)*q(5)+q(6)*q(6)+q(7)*q(7)+q(8)*q(8)
+c3 = q(1)*p(1)-q(2)*p(2)-q(3)*p(3)+q(4)*p(4)
+c4 = q(5)*p(5)-q(6)*p(6)-q(7)*p(7)+q(8)*p(8)
+c5 = q(2)*p(1)+q(1)*p(2)-q(4)*p(3)-q(3)*p(4)
+c6 = q(6)*p(5)+q(5)*p(6)-q(8)*p(7)-q(7)*p(8)
+c7 = q(3)*p(1)+q(4)*p(2)+q(1)*p(3)+q(2)*p(4)
+c8 = q(7)*p(5)+q(8)*p(6)+q(5)*p(7)+q(6)*p(8)
+c9 = p(1)*p(1)+p(2)*p(2)+p(3)*p(3)+p(4)*p(4)
+c10 = p(5)*p(5)+p(6)*p(6)+p(7)*p(7)+p(8)*p(8)
+c13 = c11*r2
+c14 = c12*r1
+c15 = c12*c10
+c16 = c11*c9
+c17 = r2*energy
+c18 = r1*energy
+#	note that twice the energy is stored in common.
+c21 = q(1)*q(1)-q(2)*q(2)-q(3)*q(3)+q(4)*q(4)-
+	q(5)*q(5)+q(6)*q(6)+q(7)*q(7)-q(8)*q(8)
+c22 = q(1)*q(2)-q(3)*q(4)-q(5)*q(6)+q(7)*q(8)
+c23 = q(1)*q(3)+q(2)*q(4)-q(5)*q(7)-q(6)*q(8)
+c22 = c22+c22
+c23 = c23+c23
+rr = c21*c21+c22*c22+c23*c23
+r = dsqrt(rr)
+a = c25/r
+tpr = r1*r2
+#	first derivative of the physical time.
+b = a*tpr/rr
+s2(1) = q(1)*c4+q(2)*c6+q(3)*c8
+s2(2) = -q(2)*c4+q(1)*c6+q(4)*c8
+s2(3) = -q(3)*c4-q(4)*c6+q(1)*c8
+s2(4) = q(4)*c4-q(3)*c6+q(2)*c8
+s2(5) = q(5)*c3+q(6)*c5+q(7)*c7
+s2(6) = -q(6)*c3+q(5)*c5+q(8)*c7
+s2(7) = -q(7)*c3-q(8)*c5+q(5)*c7
+s2(8) = q(8)*c3-q(7)*c5+q(6)*c7
+s5(1) = p(1)*c4+p(2)*c6+p(3)*c8
+s5(2) = -p(2)*c4+p(1)*c6+p(4)*c8
+s5(3) = -p(3)*c4-p(4)*c6+p(1)*c8
+s5(4) = p(4)*c4-p(3)*c6+p(2)*c8
+s5(5) = p(5)*c3+p(6)*c5+p(7)*c7
+s5(6) = -p(6)*c3+p(5)*c5+p(8)*c7
+s5(7) = -p(7)*c3-p(8)*c5+p(5)*c7
+s5(8) = p(8)*c3-p(7)*c5+p(6)*c7
+s8(1) = q(1)*c21+q(2)*c22+q(3)*c23
+s8(2) = -q(2)*c21+q(1)*c22+q(4)*c23
+s8(3) = -q(3)*c21-q(4)*c22+q(1)*c23
+s8(4) = q(4)*c21-q(3)*c22+q(2)*c23
+s8(5) = -q(5)*c21-q(6)*c22-q(7)*c23
+s8(6) = q(6)*c21-q(5)*c22-q(8)*c23
+s8(7) = q(7)*c21+q(8)*c22-q(5)*c23
+s8(8) = -q(8)*c21+q(7)*c22-q(6)*c23
+c1 = c17-c15+c19+a*r2
+c2 = c18-c16+c20+a*r1
+#	the derivatives of the regularized hamiltonian are denoted qpr & ppr.
+do i = 1,4 {
+	k = i+4
+	qpr(i) = c13*p(i)+c24*s2(i)
+	qpr(k) = c14*p(k)+c24*s2(k)
+	ppr(i) = c1*q(i)-c24*s5(i)-b*s8(i)
+	ppr(k) = c2*q(k)-c24*s5(k)-b*s8(k)
+	}
+return
+end
+
+subroutine rk78(irejct,t,dt,x,xdum,f1,f2,f3,f4,f5,f6,f7,n,tol,der)
+#
+implicit  real*8(a-h,o-z)
+#
+#
+# this subroutine will integrate a system of first order diff eqs using
+# the runge-kutta-fehlberg 7(8) formula (nasa technical report tr r-287)
+#
+# it contains an automatic stepsize control, but an initial stepsize
+# must be specified. the calling program must call rk7(8) once per step.
+# if dt is too large, the step is rejected and automatically recomputed.
+# description of parameters in argument list,
+#
+# irejct - returned as 1 if a step was rejected, otherwise 0.
+# t - independent variable.
+# dt - stepsize.
+# x - array of dependent variables, dimensioned n.
+# xdum,f1,f2,f3,f4,f5,f6,f7 - internally used arrays, dimensioned n.
+# n - number of differential equations.
+# tol - largest allowed truncation error at each step.
+# der - name of the derivative subroutine
+#
+# the derivative routine should be defined as follows,
+#     subroutine der(t,x,xdot)
+#
+#
+dimension x(n),xdum(n),f1(n),f2(n),f3(n),f4(n),f5(n),f6(n),f7(n)
+dimension ch(13),alph(13)
+logical first
+data first/.true./
+#
+if (first) {
+	ch(1) = 0.0
+	ch(2) = 0.0
+	ch(3) = 0.0
+	ch(4) = 0.0
+	ch(5) = 0.0
+	ch(6) = 34./105.
+	ch(7) = 9./35.
+	ch(8) = ch(7)
+	ch(9) = 9./280.
+	ch(10) = ch(9)
+	ch(11) = 0.0
+	ch(12) = 41./840.
+	ch(13) = ch(12)
+	alph(1) = 0.0
+	alph(2) = 2./27.
+	alph(3) = 1./9.
+	alph(4) = 1./6.
+	alph(5) = 5./12.
+	alph(6) = .5
+	alph(7) = 5./6.
+	alph(8) = 1./6.
+	alph(9) = 2./3.
+	alph(10) = 1./3.
+	alph(11) = 1.
+	alph(12) = 0.0
+	alph(13) = 1.
+	b2 1 = 2./27.
+	b3 1 = 1./36.
+	b4 1 = 1./24.
+	b5 1 = 5./12.
+	b6 1 = .05
+	b7 1 = -25./108.
+	b8 1 = 31./300.
+	b9 1 = 2.
+	b10 1 = -91./108.
+	b11 1 = 2383./4100.
+	b12 1 = 3./205.
+	b13 1 = -1777./4100.
+	b3 2 = 1./12.
+	b4 3 = 1./8.
+	b5 3 = -25./16.
+	b5 4 = -b5 3
+	b6 4 = .25
+	b7 4 = 125./108.
+	b9 4 = -53./6.
+	b10 4 = 23./108.
+	b11 4 = -341./164.
+	b13 4 = b114
+	b6 5 = .2
+	b7 5 = -65./27.
+	b8 5 = 61./225.
+	b9 5 = 704./45.
+	b10 5 = -976./135.
+	b11 5 = 4496./1025.
+	b1 35 = b1 15
+	b7 6 = 125./54.
+	b8 6 = -2./9.
+	b9 6 = -107./9.
+	b10 6 = 311./54.
+	b11 6 = -301./82.
+	b12 6 = -6./41.
+	b13 6 = -289./82.
+	b8 7 = 13./900.
+	b9 7 = 67./90.
+	b10 7 = -19./60.
+	b11 7 = 2133./4100.
+	b12 7 = -3./205.
+	b13 7 = 2193./4100.
+	b9 8 = 3.
+	b10 8 = 17./6.
+	b11 8 = 45./82.
+	b12 8 = -3./41.
+	b13 8 = 51./82.
+	b10 9 = -1./12.
+	b11 9 = 45./164.
+	b12 9 = 3./41.
+	b13 9 = 33./164.
+	b11 10 = 18./41.
+	b12 10 = 6./41.
+	b13 10 = 12./41.
+	b13 12 = 1.
+	expt = 1.0/16.0
+	first = .false.
+	tol2 = tol*tol
+	}
+irejct = 0
+call der(x(1),x(9),x(17),f1(1),f1(9),f1(17))
+repeat {
+	do i = 1,n
+		xdum(i) = x(i)+dt*b2 1*f1(i)
+	call der(xdum(1),xdum(9),xdum(17),f2(1),f2(9),f2(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b3 1*f1(i)+b3 2*f2(i))
+	call der(xdum(1),xdum(9),xdum(17),f3(1),f3(9),f3(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b4 1*f1(i)+b4 3*f3(i))
+	call der(xdum(1),xdum(9),xdum(17),f4(1),f4(9),f4(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b5 1*f1(i)+b5 3*f3(i)+b5 4*f4(i))
+	call der(xdum(1),xdum(9),xdum(17),f5(1),f5(9),f5(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b6 1*f1(i)+b6 4*f4(i)+b6 5*f5(i))
+	call der(xdum(1),xdum(9),xdum(17),f6(1),f6(9),f6(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b7 1*f1(i)+b7 4*f4(i)+b7 5*f5(i)+b7 6*f6(i))
+	call der(xdum(1),xdum(9),xdum(17),f7(1),f7(9),f7(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b8 1*f1(i)+b8 5*f5(i)+b8 6*f6(i)+b8 7*f7(i))
+	call der(xdum(1),xdum(9),xdum(17),f2(1),f2(9),f2(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(b9 1*f1(i)+b9 4*f4(i)+b9 5*f5(i)+
+			b9 6*f6(i)+b9 7*f7(i)+b9 8*f2(i))
+	call der(xdum(1),xdum(9),xdum(17),f3(1),f3(9),f3(17))
+	do i = 1,n {
+		x4 = f4(i)
+		x5 = f5(i)
+		x6 = f6(i)
+		x7 = f7(i)
+		x8 = f2(i)
+		x9 = f3(i)
+		f2(i) = ch(6)*x6+ch(7)*x7+ch(8)*x8+ch(9)*x9
+		xdum(i) = x(i)+dt*(b10 1*f1(i)+b10 4*x4+b10 5*x5+b10 6*x6+
+			b10 7*x7+b10 8*x8+b10 9*x9)
+		f4(i) = b11 1*f1(i)+b11 4*x4+b11 5*x5+b11 6*x6+b11 7*x7+
+			b11 8*x8+b11 9*x9
+		f5(i) = b12 1*f1(i)+b12 6*x6+b12 7*x7+b12 8*x8+b12 9*x9
+		f6(i) = b13 1*f1(i)+b13 4*x4+b13 5*x5+b13 6*x6+b13 7*x7+
+			b13 8*x8+b13 9*x9
+		}
+	call der(xdum(1),xdum(9),xdum(17),f3(1),f3(9),f3(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(f4(i)+b11 10*f3(i))
+	call der(xdum(1),xdum(9),xdum(17),f4(1),f4(9),f4(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(f5(i)+b12 10*f3(i))
+	call der(xdum(1),xdum(9),xdum(17),f5(1),f5(9),f5(17))
+	do i = 1,n
+		xdum(i) = x(i)+dt*(f6(i)+b13 10*f3(i)+b13 12*f5(i))
+	call der(xdum(1),xdum(9),xdum(17),f6(1),f6(9),f6(17))
+	er2 = 0.0
+	do i = 1,n {
+		te = dt*(f1(i)+f4(i)-f5(i)-f6(i))*ch(12)
+		er2 = te*te+er2
+		}
+	dt1 = dt
+	qq = tol2/(400.0*er2)
+	dt = dt1*qq**expt
+	if (er2<tol2)
+		break 1
+	irejct = 1
+	}
+t = t+dt1
+do i = 1,n
+	x(i) = x(i)+dt1*(ch(10)*f3(i)+ch(11)*f4(i)+ch(12)*f5(i)+
+		ch(13)*f6(i)+f2(i))
+return
+end

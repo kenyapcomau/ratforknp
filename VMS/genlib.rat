@@ -1,0 +1,1774 @@
+# include definition files
+   include "libdef.i"
+#-h-  addstr          350  local  09/22/80  15:38:30
+# addstr - add s to str(j) if it fits, increment j
+
+   integer function addstr (s, str, j, maxsiz)
+   integer j, maxsiz
+   character s (ARB), str (maxsiz)
+
+   integer i, addset
+
+   for (i = 1; s (i) != EOS; i = i + 1)
+      if (addset (s (i), str, j, maxsiz) == NO) {
+         addstr = NO
+         return
+         }
+   addstr = YES
+
+   return
+   end
+#-t-  addstr          350  local  09/22/80  15:38:30
+#-h-  catsub          561  local  09/22/80  15:38:30
+# catsub --- add replacement text to end of  new
+
+   subroutine catsub (lin, from, to, sub, new, k, maxnew)
+   character lin (MAXLINE), sub (maxnew), new (MAXPAT)
+   integer from (10), to (10), k, maxnew
+
+   integer i, j, junk, ri
+   integer addset
+
+   for (i = 1; sub (i) != EOS; i = i + 1)
+      if (sub (i) == DITTO) {
+         i = i + 1
+         ri = sub (i) - DIG0 + 1
+         for (j = from (ri); j < to (ri); j = j + 1)
+            junk = addset (lin (j), new, k, maxnew)
+         }
+      else
+         junk = addset (sub (i), new, k, maxnew)
+
+   return
+   end
+#-t-  catsub          561  local  09/22/80  15:38:30
+#-h-  concat          247  local  09/22/80  15:38:31
+# concat - concatenate two strings together
+
+   subroutine concat (buf1, buf2, outstr)
+   character buf1(ARB), buf2(ARB), outstr(ARB)
+
+   integer i
+
+   i = 1
+   call stcopy (buf1, 1, outstr, i)
+   call scopy (buf2, 1, outstr, i)
+
+   return
+   end
+#-t-  concat          247  local  09/22/80  15:38:31
+#-h-  ctoi          736  local  09/22/80  15:38:31
+# ctoi - convert string at in(i) to integer, increment i
+
+   integer function ctoi(in, i)
+   character in (ARB)
+   integer i
+
+   integer d
+   integer index
+   external index
+
+   # string digits "0123456789"
+   character digits(11)
+   data digits (1) /DIG0/,
+      digits (2) /DIG1/,
+      digits (3) /DIG2/,
+      digits (4) /DIG3/,
+      digits (5) /DIG4/,
+      digits (6) /DIG5/,
+      digits (7) /DIG6/,
+      digits (8) /DIG7/,
+      digits (9) /DIG8/,
+      digits (10) /DIG9/,
+      digits (11) /EOS/
+
+   while (in (i) == BLANK | in (i) == TAB)
+      i = i + 1
+   for (ctoi = 0; in (i) != EOS; i = i + 1) {
+      d = index (digits, in (i))
+      if (d == 0)      # non-digit
+         break
+      ctoi = 10 * ctoi + d - 1
+      }
+
+   return
+   end
+#-t-  ctoi          736  local  09/22/80  15:38:31
+#-h-  ctomn         1584  local  09/22/80  15:38:31
+# ctomn --- translate ASCII control character to mnemonic string
+
+   integer function ctomn (c, rep)
+   character c, rep (4)
+
+   integer i
+   integer length
+
+   character mntext (136)     # 4 chars/mnemonic; 32 control chars + SP + DEL
+   data mntext / _
+      BIGN, BIGU, BIGL, EOS,
+      BIGS, BIGO, BIGH, EOS,
+      BIGS, BIGT, BIGX, EOS,
+      BIGE, BIGT, BIGX, EOS,
+      BIGE, BIGO, BIGT, EOS,
+      BIGE, BIGN, BIGQ, EOS,
+      BIGA, BIGC, BIGK, EOS,
+      BIGB, BIGE, BIGL, EOS,
+      BIGB, BIGS, EOS,  EOS,
+      BIGH, BIGT, EOS,  EOS,
+      BIGL, BIGF, EOS,  EOS,
+      BIGV, BIGT, EOS,  EOS,
+      BIGF, BIGF, EOS,  EOS,
+      BIGC, BIGR, EOS,  EOS,
+      BIGS, BIGO, EOS,  EOS,
+      BIGS, BIGI, EOS,  EOS,
+      BIGD, BIGL, BIGE, EOS,
+      BIGD, BIGC, DIG1, EOS,
+      BIGD, BIGC, DIG2, EOS,
+      BIGD, BIGC, DIG3, EOS,
+      BIGD, BIGC, DIG4, EOS,
+      BIGN, BIGA, BIGK, EOS,
+      BIGS, BIGY, BIGN, EOS,
+      BIGE, BIGT, BIGB, EOS,
+      BIGC, BIGA, BIGN, EOS,
+      BIGE, BIGM, EOS,  EOS,
+      BIGS, BIGU, BIGB, EOS,
+      BIGE, BIGS, BIGC, EOS,
+      BIGF, BIGS, EOS,  EOS,
+      BIGG, BIGS, EOS,  EOS,
+      BIGR, BIGS, EOS,  EOS,
+      BIGU, BIGS, EOS,  EOS,
+      BIGS, BIGP, EOS,  EOS,
+      BIGD, BIGE, BIGL, EOS/
+
+   i = iand(c, 127)
+   if (0 <= i & i <= 32)     # non-printing character or space
+      call scopy (mntext, 4 * i + 1, rep, 1)
+   elif (i == 127)            # rubout (DEL)
+      call scopy (mntext, 133, rep, 1)
+   else {                     # printing character
+      rep (1) = c
+      rep (2) = EOS
+      }
+
+   return (length (rep))
+   end
+#-t-  ctomn         1584  local  09/22/80  15:38:31
+#-h-  delete          336  local  09/22/80  15:38:32
+# delete --- remove a symbol from the symbol table
+
+   subroutine delete (symbol, st)
+   character symbol (ARB)
+   pointer st
+
+   DS_DECL(Mem, 1)
+
+   integer stlu
+
+   pointer node, pred
+
+   if (stlu (symbol, node, pred, st) == YES) {
+      Mem (pred + ST_LINK) = Mem (node + ST_LINK)
+      call dsfree (node)
+      }
+
+   return
+   end
+#-t-  delete          336  local  09/22/80  15:38:32
+#-h-  dsinit          555  local  09/22/80  15:38:32
+# dsinit --- initialize dynamic storage space to w words
+
+   subroutine dsinit (w)
+   integer w
+
+   DS_DECL(Mem, 1)
+
+   pointer t
+
+   if (w < 2 * DS_OHEAD + 2)
+      call error ("in dsinit: unreasonably small memory size.")
+
+   # set up avail list:
+   t = DS_AVAIL
+   Mem (t + DS_SIZE) = 0
+   Mem (t + DS_LINK) = DS_AVAIL + DS_OHEAD
+
+   # set up first block of space:
+   t = DS_AVAIL + DS_OHEAD
+   Mem (t + DS_SIZE) = w - DS_OHEAD - 1     # -1 for MEMEND
+   Mem (t + DS_LINK) = LAMBDA
+
+   # record end of memory:
+   Mem (DS_MEMEND) = w
+
+   return
+   end
+#-t-  dsinit          555  local  09/22/80  15:38:32
+#-h-  enter          794  local  09/22/80  15:38:32
+# enter --- place a symbol in the symbol table, updating if already present
+
+   subroutine enter (symbol, info, st)
+   character symbol (ARB)
+   integer info (ARB)
+   pointer st
+
+   DS_DECL(Mem, 1)
+
+   integer i, nodsiz, j
+   integer stlu, length
+
+   pointer node, pred
+   pointer dsget
+
+   nodsiz = Mem (st)
+
+   if (stlu (symbol, node, pred, st) == NO) {
+      node = dsget (1 + nodsiz + length (symbol) + 1)
+      Mem (node + ST_LINK) = LAMBDA
+      Mem (pred + ST_LINK) = node
+      i = 1
+      j = node + ST_DATA + nodsiz
+      while (symbol (i) != EOS) {
+         Mem (j) = symbol (i)
+         i = i + 1
+         j = j + 1
+         }
+      Mem (j) = EOS
+      }
+
+   for (i = 1; i <= nodsiz; i = i + 1) {
+      j = node + ST_DATA + i - 1
+      Mem (j) = info (i)
+      }
+
+   return
+   end
+#-t-  enter          794  local  09/22/80  15:38:32
+#-h-  fmtdat          880  local  09/22/80  15:38:33
+# fmtdat - format date and time information
+
+   subroutine fmtdat (date, time, now, form)
+   character date (ARB), time (ARB)
+   integer now (7), form
+
+   # at present, simply return mm/dd/yy and hh:mm:ss
+   # 'form' is reserved for selecting different formats
+   # when those have been chosen.
+
+   date (1) = now (2) / 10 + DIG0
+   date (2) = mod (now (2), 10) + DIG0
+   date (3) = SLASH
+   date (4) = now (3) / 10 + DIG0
+   date (5) = mod (now (3), 10) + DIG0
+   date (6) = SLASH
+   date (7) = mod (now (1), 100) / 10 + DIG0
+   date (8) = mod (now (1), 10) + DIG0
+   date (9) = EOS
+
+   time (1) = now (4) / 10 + DIG0
+   time (2) = mod (now (4), 10) + DIG0
+   time (3) = COLON
+   time (4) = now (5) / 10 + DIG0
+   time (5) = mod (now (5), 10) + DIG0
+   time (6) = COLON
+   time (7) = now (6) / 10 + DIG0
+   time (8) = mod (now (6), 10) + DIG0
+   time (9) = EOS
+
+   return
+   end
+#-t-  fmtdat          880  local  09/22/80  15:38:33
+#-h-  gctoi         1109  local  09/22/80  15:38:33
+# gctoi --- convert any radix string to single precision integer
+
+   integer function gctoi (str, i, radix)
+   character str (ARB)
+   integer i, radix
+
+   integer base, v, d, j
+   integer index
+   external index
+
+   character clower
+
+   logical neg
+
+   string digits "0123456789abcdef"
+
+   v = 0
+   base = radix
+
+   while (str (i) == BLANK | str (i) == TAB)
+      i = i + 1
+
+   neg = (str (i) == MINUS)
+   if (str (i) == PLUS | str (i) == MINUS)
+      i = i + 1
+
+   if (str (i + 2) == LETR & str (i) == DIG1 & IS_DIGIT(str (i + 1))
+         | str (i + 1) == LETR & IS_DIGIT(str (i))) {
+      base = str (i) - DIG0
+      j = i
+      if (str (i + 1) != LETR) {
+         j = j + 1
+         base = base * 10 + (str (j) - DIG0)
+         }
+      if (base < 2 | base > 16)
+         base = radix
+      else
+         i = j + 2
+      }
+
+   for (; str (i) != EOS; i = i + 1) {
+      if (IS_DIGIT(str (i)))
+         d = str (i) - DIG0
+      else
+         d = index (digits, clower (str (i))) - 1
+      if (d < 0 | d >= base)
+         break
+      v = v * base + d
+      }
+
+   if (neg)
+      return (-v)
+   else
+      return (+v)
+
+   end
+#-t-  gctoi         1109  local  09/22/80  15:38:33
+#-h-  getpat          175  local  09/22/80  15:38:34
+# getpat - convert str into pattern
+
+   integer function getpat (str, pat)
+   character str (ARB), pat (ARB)
+
+   integer makpat
+
+   return (makpat (str, 1, EOS, pat))
+
+   end
+#-t-  getpat          175  local  09/22/80  15:38:34
+#-h-  getwrd          436  local  09/22/80  15:38:34
+# getwrd - get non-blank word from in (i) into out, increment i
+
+   integer function getwrd (in, i, out)
+   character in (ARB), out (ARB)
+   integer i
+
+   integer j
+
+   while (in (i) == BLANK | in (i) == TAB)
+      i = i + 1
+
+   j = 1
+   while (in (i) != EOS & in (i) != BLANK
+    & in (i) != TAB & in (i) != NEWLINE) {
+      out (j) = in (i)
+      i = i + 1
+      j = j + 1
+      }
+   out (j) = EOS
+
+   getwrd = j - 1
+   return
+   end
+#-t-  getwrd          436  local  09/22/80  15:38:34
+#-h-  gitoc         1705  local  09/22/80  15:38:35
+# gitoc --- convert single precision integer to any radix string
+
+   integer function gitoc (int, str, size, base)
+   integer int, size, base
+   character str (size)
+
+   integer carry, d, i, radix, n
+
+   logical unsign
+
+   string digits "0123456789ABCDEF"
+
+   str (1) = EOS  # digit string is generated backwards, then reversed
+   if (size <= 1)
+      return (0)
+
+   radix = iabs (base)        # get actual conversion radix
+   if (radix < 2 | radix > 16)
+      radix = 10
+   unsign = (base < 0)      # negative radices mean unsign conversion
+   if (unsign) {
+      n = iand(int / 2,       # make pos. but keep high-order bits intact
+          MAX_INTEGER)
+      carry = iand(int, 1)    # get initial carry
+      }
+   else
+      n = int
+
+   i = 1
+   repeat {
+      d = iabs (mod (n, radix))  # generate next digit
+      if (unsign) {      # this is only half of actual digit value
+         d = 2 * d + carry    # get actual digit value
+         if (d >= radix) {    # check for generated carry
+            d = d - radix
+            carry = 1
+            }
+         else
+            carry = 0
+         }
+      i = i + 1
+      str (i) = digits (d + 1)   # convert to character and store
+      n = n / radix
+      } until (n == 0 | i >= size)
+
+   if (unsign) {
+      if (carry != 0 & i < size) {    # check for final carry
+         i = i + 1
+         str (i) = DIG1
+         }
+      }
+   elif (int < 0 & i < size) {     # add sign if needed
+      i = i + 1
+      str (i) = MINUS
+      }
+
+   gitoc = i - 1     # will return length of string
+
+   for (d = 1; d < i; d = d + 1) {     # reverse digits
+      carry = str (d)
+      str (d) = str (i)
+      str (i) = carry
+      i = i - 1
+      }
+
+   return
+   end
+#-t-  gitoc         1705  local  09/22/80  15:38:35
+#-h-  lookup          519  local  09/22/80  15:38:37
+# lookup --- find a symbol in the symbol table, return its data
+
+   integer function lookup (symbol, info, st)
+   character symbol (ARB)
+   integer info (ARB)
+   pointer st
+
+   DS_DECL(Mem, 1)
+
+   integer i, nodsiz, kluge
+   integer stlu
+
+   pointer node, pred
+
+   if (stlu (symbol, node, pred, st) == NO) {
+      lookup = NO
+      return
+      }
+
+   nodsiz = Mem (st)
+   for (i = 1; i <= nodsiz; i = i + 1) {
+      kluge = node + ST_DATA - 1 + i
+      info (i) = Mem (kluge)
+      }
+   lookup = YES
+
+   return
+   end
+#-t-  lookup          519  local  09/22/80  15:38:37
+#-h-  maksub          879  local  09/22/80  15:38:37
+# maksub --- make substitution string in sub
+
+   integer function maksub (arg, from, delim, sub)
+   character arg (MAXARG), delim, sub (MAXPAT)
+   integer from
+
+   character esc, type
+
+   integer i, j, junk
+   integer addset
+
+   j = 1
+   for (i = from; arg (i) != delim & arg (i) != EOS; i = i + 1)
+      if (arg (i) == AND) {
+         junk = addset (DITTO, sub, j, MAXPAT)
+         junk = addset (DIG0, sub, j, MAXPAT)
+         }
+      else if (arg (i) == ESCAPE & type (arg (i + 1)) == DIGIT) {
+         i = i + 1
+         junk = addset (DITTO, sub, j, MAXPAT)
+         junk = addset (arg (i), sub, j, MAXPAT)
+         }
+      else
+         junk = addset (esc (arg, i), sub, j, MAXPAT)
+   if (arg (i) != delim)   # missing delimiter
+      maksub = ERR
+   else if (addset (EOS, sub, j, MAXPAT) == NO)   # no room
+      maksub = ERR
+   else
+      maksub = i
+   return
+   end
+#-t-  maksub          879  local  09/22/80  15:38:37
+#-h-  match          333  local  09/22/80  15:38:38
+# match --- find match anywhere on line
+
+   integer function match (lin, pat)
+   character lin (MAXLINE), pat (MAXPAT)
+
+   integer i, junk (9)
+   integer amatch
+
+   for (i = 1; lin (i) != EOS; i = i + 1)
+      if (amatch (lin, i, pat, junk, junk) > 0) {
+         match = YES
+         return
+         }
+   match = NO
+   return
+   end
+#-t-  match          333  local  09/22/80  15:38:38
+#-h-  mktabl          386  local  09/22/80  15:38:38
+# mktabl --- make a new (empty) symbol table
+
+   pointer function mktabl (nodsiz)
+   integer nodsiz
+
+   DS_DECL(Mem, 1)
+
+   pointer st
+   pointer dsget
+
+   integer i
+
+   st = dsget (ST_HTABSIZE + 1)     # +1 for record of nodsiz
+   Mem (st) = nodsiz
+   mktabl = st
+   do i = 1, ST_HTABSIZE; {
+      st = st + 1
+      Mem (st) = LAMBDA             # null link
+      }
+
+   return
+   end
+#-t-  mktabl          386  local  09/22/80  15:38:38
+#-h-  mntoc         1916  local  09/22/80  15:38:38
+# mntoc --- translate ASCII mnemonic into a character
+
+   character function mntoc (buf, p, default)
+   character buf (ARB), default
+   integer p
+
+   integer i, tp
+   integer equal
+
+   character c, tmp (MAXLINE)
+
+   character text (170)
+   data text / _
+      ACK, LETA, LETC, LETK, EOS,
+      BEL, LETB, LETE, LETL, EOS,
+      BS,  LETB, LETS, EOS,  EOS,
+      CAN, LETC, LETA, LETN, EOS,
+      CR,  LETC, LETR, EOS,  EOS,
+      DC1, LETD, LETC, DIG1, EOS,
+      DC2, LETD, LETC, DIG2, EOS,
+      DC3, LETD, LETC, DIG3, EOS,
+      DC4, LETD, LETC, DIG4, EOS,
+      DEL, LETD, LETE, LETL, EOS,
+      DLE, LETD, LETL, LETE, EOS,
+      EM,  LETE, LETM, EOS,  EOS,
+      ENQ, LETE, LETN, LETQ, EOS,
+      EOT, LETE, LETO, LETT, EOS,
+      ESC, LETE, LETS, LETC, EOS,
+      ETB, LETE, LETT, LETB, EOS,
+      ETX, LETE, LETT, LETX, EOS,
+      FF,  LETF, LETF, EOS,  EOS,
+      FS,  LETF, LETS, EOS,  EOS,
+      GS,  LETG, LETS, EOS,  EOS,
+      HT,  LETH, LETT, EOS,  EOS,
+      LF,  LETL, LETF, EOS,  EOS,
+      NAK, LETN, LETA, LETK, EOS,
+      NUL, LETN, LETU, LETL, EOS,
+      RS,  LETR, LETS, EOS,  EOS,
+      SI,  LETS, LETI, EOS,  EOS,
+      SO,  LETS, LETO, EOS,  EOS,
+      SOH, LETS, LETO, LETH, EOS,
+      SP,  LETS, LETP, EOS,  EOS,
+      STX, LETS, LETT, LETX, EOS,
+      SUB, LETS, LETU, LETB, EOS,
+      SYN, LETS, LETY, LETN, EOS,
+      US,  LETU, LETS, EOS,  EOS,
+      VT,  LETV, LETT, EOS,  EOS/
+
+   tp = 1
+   repeat {
+      tmp (tp) = buf (p)
+      tp = tp + 1
+      p = p + 1
+      } until (! (IS_LETTER(buf (p)) | IS_DIGIT(buf (p)))
+                  | tp >= MAXLINE)
+   tmp (tp) = EOS
+
+   if (tp == 2)
+      c = tmp (1)
+   else {
+      call lower (tmp)
+      for (i = 1; i < 170; i = i + 5)  # should use binary search here
+         if (equal (tmp, text (i + 1)) == YES)
+            break
+      if (i < 170)
+         c = text (i)
+      else
+         c = default
+      }
+
+   return (c)
+   end
+#-t-  mntoc         1916  local  09/22/80  15:38:38
+#-h-  putdec          340  local  09/22/80  15:38:40
+# putdec - put decimal integer n in field width >= w
+
+   subroutine putdec(n,w)
+   integer n, w
+
+   character chars (MAXCHARS)
+
+   integer i, nd
+   integer itoc
+
+   nd = itoc (n, chars, MAXCHARS)
+   for (i = nd + 1; i <= w; i = i + 1)
+      call putc (BLANK)
+   for (i = 1; i <= nd; i = i + 1)
+      call putc (chars (i))
+
+   return
+   end
+#-t-  putdec          340  local  09/22/80  15:38:40
+#-h-  rmtabl          444  local  09/22/80  15:38:40
+# rmtabl --- remove a symbol table, deleting all entries
+
+   subroutine rmtabl (st)
+   pointer st
+
+   DS_DECL(Mem, 1)
+
+   integer i
+
+   pointer walker, bucket, node
+
+   bucket = st
+   do i = 1, ST_HTABSIZE; {
+      bucket = bucket + 1
+      walker = Mem (bucket)
+      while (walker != LAMBDA) {
+         node = walker
+         walker = Mem (node + ST_LINK)
+         call dsfree (node)
+         }
+      }
+
+   call dsfree (st)
+   return
+   end
+#-t-  rmtabl          444  local  09/22/80  15:38:40
+#-h-  sctabl         1554  local  09/22/80  15:38:40
+# sctabl --- scan symbol table, returning next entry or EOF
+
+   integer function sctabl (table, sym, info, posn)
+   pointer table, posn
+   character sym (ARB)
+   integer info (ARB)
+
+   DS_DECL(Mem, 1)
+
+   pointer bucket, walker
+   pointer dsget
+
+   integer nodsiz, i, j
+
+   if (posn == 0) {                 # just starting scan?
+      posn = dsget (2)                 # get space for position info
+      Mem (posn) = 1                   # get index of first bucket
+      Mem (posn + 1) = Mem (table + 1) # get pointer to first chain
+      }
+
+   bucket = Mem (posn)              # recover previous position
+   walker = Mem (posn + 1)
+   nodsiz = Mem (table)
+
+   repeat {    # until the next symbol, or none are left
+      if (walker != LAMBDA) {       # symbol available?
+         i = walker + ST_DATA + nodsiz
+         j = 1
+         while (Mem (i) != EOS) {
+            sym (j) = Mem (i)
+            i = i + 1
+            j = j + 1
+            }
+         sym (j) = EOS
+         for (i = 1; i <= nodsiz; i = i + 1) {
+            j = walker + ST_DATA + i - 1
+            info (i) = Mem (j)
+            }
+         Mem (posn) = bucket        # save position of next symbol
+         Mem (posn + 1) = Mem (walker + ST_LINK)
+         sctabl = 1  # not EOF
+         return
+         }
+      else {
+         bucket = bucket + 1
+         if (bucket > ST_HTABSIZE)
+            break
+         j = table + bucket
+         walker = Mem (j)
+         }
+      }
+
+   call dsfree (posn)      # throw away position information
+   posn = 0
+   sctabl = EOF
+   return
+   end
+#-t-  sctabl         1554  local  09/22/80  15:38:40
+#-h-  sdrop          401  local  09/22/80  15:38:41
+# sdrop --- drop characters from a string APL-style
+
+   integer function sdrop (from, to, chars)
+   character from (ARB), to (ARB)
+   integer chars
+
+   integer len, start
+   integer ctoc, length, min0
+
+   len = length (from)
+   if (chars < 0)
+      return (ctoc (from, to, len + chars + 1))
+   else {
+      start = min0 (chars, len)
+      return (ctoc (from (start + 1), to, len + 1))
+      }
+
+   end
+#-t-  sdrop          401  local  09/22/80  15:38:41
+#-h-  stake          399  local  09/22/80  15:38:42
+# stake --- take characters from a string APL-style
+
+   integer function stake (from, to, chars)
+   character from (ARB), to (ARB)
+   integer chars
+
+   integer len, start
+   integer length, ctoc, max0
+
+   len = length (from)
+   if (chars < 0) {
+      start = max0 (len + chars, 0)
+      return (ctoc (from (start + 1), to, len + 1))
+      }
+   else
+      return (ctoc (from, to, chars + 1))
+
+   end
+#-t-  stake          399  local  09/22/80  15:38:42
+#-h-  strcmp          435  local  09/22/80  15:38:42
+# strcmp - compare 2 strings; return -1 if <, 0 if =, +1 if >
+
+   integer function strcmp (str1, str2)
+   character str1 (ARB), str2 (ARB)
+
+   integer i
+
+   for (i = 1; str1 (i) == str2 (i); i = i + 1)
+      if (str1 (i) == EOS)
+         return (0)
+
+   if (str1 (i) == EOS)
+      strcmp = -1
+   else if (str2 (i) == EOS)
+      strcmp = + 1
+   else if (str1 (i) < str2 (i))
+      strcmp = -1
+   else
+      strcmp = +1
+
+   return
+   end
+#-t-  strcmp          435  local  09/22/80  15:38:42
+#-h-  strim          295  local  09/22/80  15:38:42
+# strim --- trim trailing blanks and tabs from a string
+
+   integer function strim (str)
+   character str (ARB)
+
+   integer lnb, i
+
+   lnb = 0
+   for (i = 1; str (i) != EOS; i = i + 1)
+      if (str (i) != BLANK & str (i) != TAB)
+         lnb = i
+
+   str (lnb + 1) = EOS
+   return (lnb)
+
+   end
+#-t-  strim          295  local  09/22/80  15:38:42
+#-h-  slstr          557  local  09/22/80  15:38:42
+# slstr --- slice a substring from a string
+
+   integer function slstr (from, to, first, chars)
+   character from (ARB), to (ARB)
+   integer first, chars
+
+   integer len, i, j, k
+   integer length
+
+   len = length (from)
+
+   i = first
+   if (i < 1)
+      i = i + len + 1
+
+   if (chars < 0) {
+      i = i + chars + 1
+      chars = - chars
+      }
+
+   j = i + chars - 1
+   if (i < 1)
+      i = 1
+   if (j > len)
+      j = len
+
+   for (k = 0; i <= j; k = k + 1) {
+      to (k + 1) = from (i)
+      i = i + 1
+      }
+   to (k + 1) = EOS
+
+   return (k)
+   end
+#-t-  slstr          557  local  09/22/80  15:38:42
+#-h-  type         2476  local  09/22/80  15:38:43
+# type - determine type of character
+
+   character function type (c)
+
+   character c
+
+   if ((LETA <= c & c <= LETZ) | (BIGA <= c & c <= BIGZ))
+      type = LETTER
+   else if (DIG0 <= c & c <= DIG9)
+      type = DIGIT
+   else
+      type = c
+
+   return
+   end
+#-t-  type         2476  local  09/22/80  15:38:43
+#-h-  upper          229  local  09/22/80  15:38:44
+# upper - fold all alphas to upper case
+
+   subroutine upper (token)
+   character token (ARB)
+
+   character cupper
+
+   integer i
+
+   for (i = 1; token (i) != EOS; i = i + 1)
+      token (i) = cupper (token (i))
+
+   return
+   end
+#-t-  upper          229  local  09/22/80  15:38:44
+#-h-  wkday          406  local  09/22/80  15:38:44
+# wkday --- get day-of-week corresponding to month,day,year
+
+   integer function wkday (month, day, year)
+   integer month, day, year
+
+   integer lmonth, lday, lyear
+
+   lmonth = month - 2
+   lday = day
+   lyear = year
+
+   if (lmonth <= 0) {
+      lmonth = lmonth + 12
+      lyear = lyear - 1
+      }
+
+   wkday = mod (lday + (26 * lmonth - 2) / 10 + lyear + lyear / 4 - 34,
+       7) + 1
+
+   return
+   end
+#-t-  wkday          406  local  09/22/80  15:38:44
+#-h-  stcopy          283  local  09/22/80  15:38:45
+# stcopy - copy string from in (i) to out (j), updating j, excluding EOS
+
+   subroutine stcopy (in, i, out, j)
+   character in (ARB), out (ARB)
+   integer i, j
+
+   integer k
+
+   for (k = i; in (k) != EOS; k = k + 1) {
+      out (j) = in (k)
+      j = j + 1
+      }
+   out(j) = EOS
+   return
+   end
+#-t-  stcopy          283  local  09/22/80  15:38:45
+#-h-  makpat         2047  local  09/22/80  15:38:45
+# makpat --- make pattern from arg (from), terminate at delim
+
+   integer function makpat (arg, from, delim, pat)
+   character arg (MAXARG), delim, pat (MAXPAT)
+   integer from
+
+   character esc
+
+   integer i, j, junk, lastcl, lastj, lj,
+      tagnst, tagnum, tagstk (9)
+   integer addset, getccl, stclos
+
+   j = 1      # pat index
+   lastj = 1
+   lastcl = -1
+   tagnum = 0
+   tagnst = 0
+   for (i = from; arg (i) != delim & arg (i) != EOS; i = i + 1) {
+      lj = j
+      if (arg (i) == ANY)
+         junk = addset (ANY, pat, j, MAXPAT)
+      else if (arg (i) == BOL & i == from)
+         junk = addset (BOL, pat, j, MAXPAT)
+      else if (arg (i) == EOL & arg (i + 1) == delim)
+         junk = addset (EOL, pat, j, MAXPAT)
+      else if (arg (i) == CCL) {
+         if (getccl (arg, i, pat, j) == ERR) {
+            makpat = ERR
+            return
+            }
+         }
+      else if (arg (i) == CLOSURE & i > from) {
+         lj = lastj
+         if (pat (lj) == BOL | pat (lj) == EOL | pat (lj) == CLOSURE |
+               pat (lj) == START_TAG | pat (lj) == STOP_TAG)
+            break
+         lastcl = stclos (pat, j, lastj, lastcl)
+         }
+      else if (arg (i) == START_TAG) {
+         if (tagnum >= 9)    # too many tagged sub-patterns
+            break
+         tagnum = tagnum + 1
+         tagnst = tagnst + 1
+         tagstk (tagnst) = tagnum
+         junk = addset (START_TAG, pat, j, MAXPAT)
+         junk = addset (tagnum, pat, j, MAXPAT)
+         }
+      else if (arg (i) == STOP_TAG & tagnst > 0) {
+         junk = addset (STOP_TAG, pat, j, MAXPAT)
+         junk = addset (tagstk (tagnst), pat, j, MAXPAT)
+         tagnst = tagnst - 1
+         }
+      else {
+         junk = addset (CHAR, pat, j, MAXPAT)
+         junk = addset (esc (arg, i), pat, j, MAXPAT)
+         }
+      lastj = lj
+      }
+   if (arg (i) != delim)   # terminated early
+      makpat = ERR
+   else if (addset (EOS, pat, j, MAXPAT) == NO)   # no room
+      makpat = ERR
+   else if (tagnst != 0)
+      makpat = ERR
+   else
+      makpat = i
+   return
+   end
+#-t-  makpat         2047  local  09/22/80  15:38:45
+#-h-  stlu          705  local  09/22/80  15:38:48
+# stlu --- symbol table lookup primitive
+
+   integer function stlu (symbol, node, pred, st)
+   character symbol (ARB)
+   pointer node, pred, st
+
+   DS_DECL(Mem, 1)
+
+   integer hash, i, j, nodsiz
+   integer equal
+
+   nodsiz = Mem (st)
+
+   hash = 0
+   for (i = 1; symbol (i) != EOS; i = i + 1)
+      hash = hash + symbol (i)
+   hash = mod (hash, ST_HTABSIZE) + 1
+
+   pred = st + hash
+   node = Mem (pred)
+   while (node != LAMBDA) {
+      i = 1
+      j = node + ST_DATA + nodsiz
+      while (symbol (i) == Mem (j)) {
+         if (symbol (i) == EOS)
+            return (YES)
+         i = i + 1
+         j = j + 1
+         }
+      pred = node
+      node = Mem (pred + ST_LINK)
+      }
+
+   return (NO)
+   end
+#-t-  stlu          705  local  09/22/80  15:38:48
+#-h-  amatch         1714  local  09/22/80  15:38:48
+# amatch --- (non-recursive) look for match starting at lin (from)
+
+   integer function amatch (lin, from, pat, tagbeg, tagend)
+   character lin (MAXLINE), pat (MAXPAT)
+   integer from, tagbeg (10), tagend (10)
+
+   integer i, j, offset, stack
+   integer omatch, patsiz
+
+   for (i = 1; i <= 10; i = i + 1) {
+      tagbeg (i) = 0
+      tagend (i) = 0
+      }
+   tagbeg (1) = from
+   stack = 0
+   offset = from      # next unexamined input character
+   for (j = 1; pat (j) != EOS; j = j + patsiz (pat, j))
+      if (pat (j) == CLOSURE) {      # a closure entry
+         stack = j
+         j = j + CLOSIZE      # step over CLOSURE
+         for (i = offset; lin (i) != EOS; )      # match as many as
+            if (omatch (lin, i, pat, j) == NO)   # possible
+               break
+         pat (stack + COUNT) = i - offset
+         pat (stack + START) = offset
+         offset = i      # character that made us fail
+         }
+      else if (pat (j) == START_TAG) {
+         i = pat (j + 1)
+         tagbeg (i + 1) = offset
+         }
+      else if (pat (j) == STOP_TAG) {
+         i = pat (j + 1)
+         tagend (i + 1) = offset
+         }
+      else if (omatch (lin, offset, pat, j) == NO) {  # non-closure
+         for ( ; stack > 0; stack = pat (stack + PREVCL))
+            if (pat (stack + COUNT) > 0)
+               break
+         if (stack <= 0) {      # stack is empty
+            amatch = 0      # return failure
+            return
+            }
+         pat (stack + COUNT) = pat (stack + COUNT) - 1
+         j = stack + CLOSIZE
+         offset = pat (stack + START)  +  pat (stack + COUNT)
+         }
+      # else omatch succeeded
+
+   amatch = offset
+   tagend (1) = offset
+   return      # success
+   end
+#-t-  amatch         1714  local  09/22/80  15:38:48
+#-h-  lower          135  local  09/22/80  15:38:49
+# lower - fold all letters to lower case
+
+   subroutine lower (token)
+   character token (ARB)
+
+   call fold (token)
+
+   return
+   end
+#-t-  lower          135  local  09/22/80  15:38:49
+#-h-  dsfree         1078  local  09/22/80  15:38:50
+# dsfree --- return a block of storage to the available space list
+
+   subroutine dsfree (block)
+   pointer block
+
+   DS_DECL(Mem, 1)
+
+   pointer p0, p, q
+
+   integer n, junk
+   character con (10)
+
+   integer getlin
+
+   p0 = block - DS_OHEAD
+   n = Mem (p0 + DS_SIZE)
+   q = DS_AVAIL
+
+   repeat {
+      p = Mem (q + DS_LINK)
+      if (p == LAMBDA | p > p0)
+         break
+      q = p
+      }
+
+   if (q + Mem (q + DS_SIZE) > p0) {
+      call remark ("in dsfree:  attempt to free unallocated block.")
+      call remark ("type 'c' to continue.")
+      junk = getlin (con, STDIN)
+      if (con (1) != LETC & con (1) != BIGC)
+         call endst
+      return      # do not attempt to free the block
+      }
+
+   if (p0 + n == p & p != LAMBDA) {
+      n = n + Mem (p + DS_SIZE)
+      Mem (p0 + DS_LINK) = Mem (p + DS_LINK)
+      }
+   else
+      Mem (p0 + DS_LINK) = p
+
+   if (q + Mem (q + DS_SIZE) == p0) {
+      Mem (q + DS_SIZE) = Mem (q + DS_SIZE) + n
+      Mem (q + DS_LINK) = Mem (p0 + DS_LINK)
+      }
+   else {
+      Mem (q + DS_LINK) = p0
+      Mem (p0 + DS_SIZE) = n
+      }
+
+   return
+   end
+#-t-  dsfree         1078  local  09/22/80  15:38:50
+#-h-  dsget          995  local  09/22/80  15:38:50
+# dsget --- get pointer to block of at least w available words
+
+   pointer function dsget (w)
+   integer w
+
+   DS_DECL(Mem, 1)
+
+   pointer p, q, l
+
+   integer n, k, junk
+   integer getlin
+
+   character c (10)
+
+   n = w + DS_OHEAD
+   q = DS_AVAIL
+
+   repeat {
+      p = Mem (q + DS_LINK)
+      if (p == LAMBDA) {
+         call remark ("in dsget: out of storage space.")
+         call remark ("type 'c' or 'i' for char or integer dump.")
+         junk = getlin (c, STDIN)
+         if (c (1) == LETC | c (1) == BIGC)
+            call dsdump (LETTER)
+         else if (c (1) == LETI | c (1) == BIGI)
+            call dsdump (DIGIT)
+         call error ("program terminated.")
+         }
+      if (Mem (p + DS_SIZE) >= n)
+         break
+      q = p
+      }
+
+   k = Mem (p + DS_SIZE) - n
+   if (k >= DS_CLOSE) {
+      Mem (p + DS_SIZE) = k
+      l = p + k
+      Mem (l + DS_SIZE) = n
+      }
+   else {
+      Mem (q + DS_LINK) = Mem (p + DS_LINK)
+      l = p
+      }
+
+   return (l + DS_OHEAD)
+
+   end
+#-t-  dsget          995  local  09/22/80  15:38:50
+#-h-  ctoc          290  local  09/22/80  15:38:50
+# ctoc --- convert EOS-terminated string to EOS-terminated string
+
+   integer function ctoc (from, to, len)
+   integer len
+   character from (ARB), to (len)
+
+   integer i
+
+   for (i = 1; i < len & from (i) != EOS; i = i + 1)
+      to (i) = from (i)
+
+   to (i) = EOS
+
+   return (i - 1)
+
+   end
+#-t-  ctoc          290  local  09/22/80  15:38:50
+#-h-  cupper          195  local  09/22/80  15:38:51
+# cupper - change letter to upper case
+
+   character function cupper (c)
+   character c
+
+   if (c >= LETA & c <= LETZ)
+      cupper = c + (BIGA - LETA)
+   else
+      cupper = c
+
+   return
+   end
+#-t-  cupper          195  local  09/22/80  15:38:51
+#-h-  stclos          635  local  09/22/80  15:38:51
+# stclos --- insert closure entry at pat (j)
+
+   integer function stclos (pat, j, lastj, lastcl)
+   character pat (MAXPAT)
+   integer j, lastj, lastcl
+
+   integer addset
+   integer jp, jt, junk
+
+   for (jp = j - 1; jp >= lastj; jp = jp - 1) {   # make a hole
+      jt = jp + CLOSIZE
+      junk = addset (pat (jp), pat, jt, MAXPAT)
+      }
+   j = j + CLOSIZE
+   stclos = lastj
+   junk = addset (CLOSURE, pat, lastj, MAXPAT)   # put closure in it
+   junk = addset (-1, pat, lastj, MAXPAT)        # COUNT
+   junk = addset (lastcl, pat, lastj, MAXPAT)    # PREVCL
+   junk = addset (-1, pat, lastj, MAXPAT)        # START
+
+   return
+   end
+#-t-  stclos          635  local  09/22/80  15:38:51
+#-h-  getccl          623  local  09/22/80  15:38:52
+# getccl --- expand char class at arg (i) into pat (j)
+
+   integer function getccl (arg, i, pat, j)
+   character arg (MAXARG), pat (MAXPAT)
+   integer i, j
+
+   integer jstart, junk
+   integer addset
+
+   i = i + 1      # skip over [
+   if (arg (i) == NOT) {
+      junk = addset (NCCL, pat, j, MAXPAT)
+      i = i + 1
+      }
+   else
+      junk = addset (CCL, pat, j, MAXPAT)
+   jstart = j
+   junk = addset (-1, pat, j, MAXPAT)     # leave room for count
+   call filset (CCLEND, arg, i, pat, j, MAXPAT)
+   pat (jstart) = j - jstart - 1
+   if (arg (i) == CCLEND)
+      getccl = YES
+   else
+      getccl = ERR
+
+   return
+   end
+#-t-  getccl          623  local  09/22/80  15:38:52
+#-h-  skipbl          187  local  09/22/80  15:38:52
+# skipbl - skip blanks and tabs at lin(i)
+
+   subroutine skipbl(lin, i)
+   character lin(ARB)
+   integer i
+
+   while (lin (i) == BLANK | lin (i) == TAB)
+      i = i + 1
+
+   return
+   end
+#-t-  skipbl          187  local  09/22/80  15:38:52
+#-h-  equal          273  local  09/22/80  15:38:52
+# equal - compare str1 to str2;  return YES if equal, NO if not
+
+   integer function equal (str1, str2)
+   character str1(ARB), str2(ARB)
+
+   integer i
+
+   for (i = 1; str1 (i) == str2 (i); i = i + 1)
+      if (str1 (i) == EOS)
+         return (YES)
+
+   return (NO)
+   end
+#-t-  equal          273  local  09/22/80  15:38:52
+#-h-  omatch          953  local  09/22/80  15:38:52
+# omatch --- try to match a single pattern at pat (j)
+
+   integer function omatch (lin, i, pat, j)
+   character lin (MAXLINE), pat (MAXPAT)
+   integer i, j
+
+   integer bump
+   integer locate
+
+   omatch = NO
+   if (lin (i) == EOS)
+      return
+   bump = -1
+   if (pat (j) == CHAR) {
+      if (lin (i) == pat (j + 1))
+         bump = 1
+      }
+   else if (pat (j) == BOL) {
+      if (i == 1)
+         bump = 0
+      }
+   else if (pat (j) == ANY) {
+      if (lin (i) != NEWLINE)
+         bump = 1
+      }
+   else if (pat (j) == EOL) {
+      if (lin (i) == NEWLINE)
+         bump = 0
+      }
+   else if (pat (j) == CCL) {
+      if (locate (lin (i), pat, j + 1) == YES)
+         bump = 1
+      }
+   else if (pat (j) == NCCL) {
+      if (lin (i) != NEWLINE & locate (lin (i), pat, j + 1) == NO)
+         bump = 1
+      }
+   else
+      call error ("in omatch: can't happen.")
+   if (bump >= 0) {
+      i = i + bump
+      omatch = YES
+      }
+
+   return
+   end
+#-t-  omatch          953  local  09/22/80  15:38:52
+#-h-  patsiz          516  local  09/22/80  15:38:53
+# patsiz --- returns size of pattern entry at pat (n)
+
+   integer function patsiz (pat, n)
+   character pat (MAXPAT)
+   integer n
+
+   if (pat (n) == CHAR | pat (n) == START_TAG | pat (n) == STOP_TAG)
+      patsiz = 2
+   else if (pat (n) == BOL | pat (n) == EOL | pat (n) == ANY)
+      patsiz = 1
+   else if (pat (n) == CCL | pat (n) == NCCL)
+      patsiz = pat (n + 1) + 2
+   else if (pat (n) == CLOSURE)      # optional
+      patsiz = CLOSIZE
+   else
+      call error ("in patsiz: can't happen.")
+
+   return
+   end
+#-t-  patsiz          516  local  09/22/80  15:38:53
+#-h-  fold          240  local  09/22/80  15:38:53
+# fold - fold all letters in a string to lower case
+
+   subroutine fold (token)
+   character token (ARB)
+
+   character clower
+
+   integer i
+
+   for (i = 1; token (i) != EOS; i = i + 1)
+      token (i) = clower (token (i))
+
+   return
+   end
+#-t-  fold          240  local  09/22/80  15:38:53
+#-h-  dsdump          756  local  09/22/80  15:38:53
+# dsdump --- produce semi-readable dump of storage
+
+   subroutine dsdump (form)
+   character form
+
+   DS_DECL(Mem, 1)
+
+   pointer p, t, q
+
+   t = DS_AVAIL
+
+   call remark ("** DYNAMIC STORAGE DUMP **.")
+   call putint (1, 5, ERROUT)
+   call putch (BLANK, ERROUT)
+   call putint (DS_OHEAD + 1, 0, ERROUT)
+   call remark (" words in use.")
+
+   p = Mem (t + DS_LINK)
+   while (p != LAMBDA) {
+      call putint (p, 5, ERROUT)
+      call putch (BLANK, ERROUT)
+      call putint (Mem (p + DS_SIZE), 0, ERROUT)
+      call remark (" words available.")
+      q = p + Mem (p + DS_SIZE)
+      while (q != Mem (p + DS_LINK) & q < Mem (DS_MEMEND))
+         call dsdbiu (q, form)
+      p = Mem (p + DS_LINK)
+      }
+
+   call remark ("** END DUMP **.")
+   return
+   end
+#-t-  dsdump          756  local  09/22/80  15:38:53
+#-h-  filset         1102  local  09/22/80  15:38:54
+# filset --- expand set at  array (i)  into  set (j),  stop at  delim
+
+   subroutine filset (delim, array, i, set, j, maxset)
+   integer i, j, maxset
+   character array (ARB), delim, set (maxset)
+
+   character esc
+
+   integer junk
+   integer addset, index
+   external index
+
+   string digits "0123456789"
+   string lowalf "abcdefghijklmnopqrstuvwxyz"
+   string upalf "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+   for ( ; array (i) != delim & array (i) != EOS; i = i + 1)
+      if (array (i) == ESCAPE)
+         junk = addset (esc (array, i), set, j, maxset)
+      else if (array (i) != DASH)
+         junk = addset (array (i), set, j, maxset)
+      else if (j <= 1 | array (i + 1) == EOS)   # literal -
+         junk = addset (DASH, set, j, maxset)
+      else if (index (digits, set (j - 1)) > 0)
+         call dodash (digits, array, i, set, j, maxset)
+      else if (index (lowalf, set (j - 1)) > 0)
+         call dodash (lowalf, array, i, set, j, maxset)
+      else if (index (upalf, set (j - 1)) > 0)
+         call dodash (upalf, array, i, set, j, maxset)
+      else
+         junk = addset (DASH, set, j, maxset)
+   return
+   end
+#-t-  filset         1102  local  09/22/80  15:38:54
+#-h-  locate          345  local  09/22/80  15:38:54
+# locate --- look for c in char class at pat (offset)
+
+   integer function locate (c, pat, offset)
+   character c, pat (MAXPAT)
+   integer offset
+
+   integer i
+
+   # size of class is at pat (offset), characters follow
+   for (i = offset + pat (offset); i > offset; i = i - 1)
+      if (c == pat (i))
+         return (YES)
+
+   return (NO)
+   end
+#-t-  locate          345  local  09/22/80  15:38:54
+#-h-  clower          274  local  09/22/80  15:38:55
+# clower - change letter to lower case
+
+   character function clower(c)
+   character c
+
+   character k
+
+   if (c >= BIGA & c <= BIGZ) {
+      k = LETA - BIGA   # avoid integer overflow in byte machines
+      clower = c + k
+      }
+   else
+      clower = c
+
+   return
+   end
+#-t-  clower          274  local  09/22/80  15:38:55
+#-h-  dsdbiu          839  local  09/22/80  15:38:55
+# dsdbiu --- dump contents of block-in-use
+
+   subroutine dsdbiu (b, form)
+   pointer b
+   character form
+
+   DS_DECL(Mem, 1)
+
+   integer l, s, lmax
+
+   string blanks "          "
+
+   call putint (b, 5, ERROUT)
+   call putch (BLANK, ERROUT)
+   call putint (Mem (b + DS_SIZE), 0, ERROUT)
+   call remark (" words in use.")
+
+   l = 0
+   s = b + Mem (b + DS_SIZE)
+   if (form == DIGIT)
+      lmax = 5
+   else
+      lmax = 50
+
+   for (b = b + DS_OHEAD; b < s; b = b + 1) {
+      if (l == 0)
+         call putlin (blanks, ERROUT)
+      if (form == DIGIT)
+         call putint (Mem (b), 10, ERROUT)
+      elif (form == LETTER)
+         call putch (Mem (b), ERROUT)
+      l = l + 1
+      if (l >= lmax) {
+         l = 0
+         call putch (NEWLINE, ERROUT)
+         }
+      }
+
+   if (l != 0)
+      call putch (NEWLINE, ERROUT)
+
+   return
+   end
+#-t-  dsdbiu          839  local  09/22/80  15:38:55
+#-h-  scopy          298  local  09/22/80  15:38:56
+# scopy - copy string at from (i) to to (j)
+
+   subroutine scopy (from, i, to, j)
+   character from (ARB), to (ARB)
+   integer i, j
+
+   integer k1, k2
+
+   k2 = j
+   for (k1 = i; from (k1) != EOS; k1 = k1 + 1) {
+      to (k2) = from (k1)
+      k2 = k2 + 1
+      }
+   to (k2) = EOS
+
+   return
+   end
+#-t-  scopy          298  local  09/22/80  15:38:56
+#-h-  dodash          466  local  09/22/80  15:38:56
+# dodash --- expand array (i-1)-array (i+1) into set (j)... from valid
+
+   subroutine dodash (valid, array, i, set, j, maxset)
+   integer i, j, maxset
+   character valid (ARB), array (ARB), set (maxset)
+
+   character esc
+
+   integer junk, k, limit
+   integer addset, index
+   external index
+
+   i = i + 1
+   j = j - 1
+   limit = index (valid, esc (array, i))
+   for (k = index (valid, set (j)); k <= limit; k = k + 1)
+      junk = addset (valid (k), set, j, maxset)
+
+   return
+   end
+#-t-  dodash          466  local  09/22/80  15:38:56
+#-h-  putint          257  local  09/22/80  15:38:57
+# putint - output integer in specified field
+
+   subroutine putint (n, w, fd)
+   integer n, w
+   filedes fd
+
+   character chars (MAXCHARS)
+
+   integer junk
+   integer itoc
+
+   junk = itoc (n, chars, MAXCHARS)
+   call putstr (chars, w, fd)
+
+   return
+   end
+#-t-  putint          257  local  09/22/80  15:38:57
+#-h-  addset          279  local  09/22/80  15:38:58
+# addset - put c in string (j) if it fits, increment j
+
+   integer function addset (c, str, j, maxsiz)
+   integer j, maxsiz
+   character c, str (maxsiz)
+
+   if (j > maxsiz)
+      addset = NO
+   else {
+      str(j) = c
+      j = j + 1
+      addset = YES
+      }
+
+   return
+   end
+#-t-  addset          279  local  09/22/80  15:38:58
+#-h-  esc          497  local  09/22/80  15:38:58
+# esc - map array (i) into escaped character if appropriate
+
+   character function esc (array, i)
+   character array (ARB)
+   integer i
+
+   if (array (i) != ESCAPE)
+      esc = array (i)
+   else if (array (i+1) == EOS)    # @ not special at end
+      esc = ESCAPE
+   else {
+      i = i + 1
+      if (array (i) == LETN | array (i) == BIGN)
+         esc = NEWLINE
+      else if (array (i) == LETT | array (i) == BIGT)
+         esc = TAB
+      else
+         esc = array (i)
+      }
+
+   return
+   end
+#-t-  esc          497  local  09/22/80  15:38:58
+#-h-  index          240  local  09/22/80  15:38:58
+# index - find character  c  in string  str
+
+   integer function index (str, c)
+   character str (ARB), c
+
+   for (index = 1; str (index) != EOS; index = index + 1)
+      if (str (index) == c)
+         return
+
+   index = 0
+   return
+   end
+#-t-  index          240  local  09/22/80  15:38:58
+#-h-  putstr          427  local  09/22/80  15:38:59
+# putstr - output character string in specified field
+
+   subroutine putstr (str, w, fd)
+   character str (ARB)
+   integer w
+   filedes fd
+
+   character length
+
+   integer i, len
+
+   len = length (str)
+   for (i = len + 1; i <= w; i = i + 1)
+      call putch (BLANK, fd)
+   for (i = 1; i <= len; i = i + 1)
+      call putch (str (i), fd)
+   for (i = (-w) - len; i > 0; i = i - 1)
+      call putch (BLANK, fd)
+
+   return
+   end
+#-t-  putstr          427  local  09/22/80  15:38:59
+#-h-  itoc         1033  local  09/22/80  15:38:59
+# itoc - convert integer  int  to char string in  str
+
+   integer function itoc (int, str, size)
+   integer int, size
+   character str (ARB)
+
+   integer mod
+   integer d, i, intval, j, k
+
+   # string digits "0123456789"
+   character digits (11)
+   data digits (1) /DIG0/,
+      digits (2) /DIG1/,
+      digits (3) /DIG2/,
+      digits (4) /DIG3/,
+      digits (5) /DIG4/,
+      digits (6) /DIG5/,
+      digits (7) /DIG6/,
+      digits (8) /DIG7/,
+      digits (9) /DIG8/,
+      digits (10) /DIG9/,
+      digits (11) /EOS/
+
+   intval = iabs (int)
+   str (1) = EOS
+   i = 1
+   repeat {                          # generate digits
+      i = i + 1
+      d = mod (intval, 10)
+      str (i) = digits (d+1)
+      intval = intval / 10
+      } until (intval == 0 | i >= size)
+
+   if (int < 0 & i < size) {         # then sign
+      i = i + 1
+      str (i) = MINUS
+      }
+   itoc = i - 1
+
+   for (j = 1; j < i; j = j + 1) {   # then reverse
+      k = str (i)
+      str (i) = str (j)
+      str (j) = k
+      i = i - 1
+      }
+
+   return
+   end
+#-t-  itoc         1033  local  09/22/80  15:38:59
+#-h-  length          184  local  09/22/80  15:39:01
+# length - compute length of string
+
+   integer function length (str)
+   character str (ARB)
+
+   for (length = 0; str (length+1) != EOS; length = length + 1)
+      ;
+
+   return
+   end
+#-t-  length          184  local  09/22/80  15:39:01
+#-h-  ctos          123  local  09/22/80  15:39:02
+# ctos - convert Ratfor string to Fortran-77 string
+
+   integer function ctos (str, fstr)
+   character str(ARB)
+   CHARACTER*(*) fstr
+
+   for (ctos = 1; str(ctos) != EOS; ctos = ctos + 1)
+      fstr(ctos:ctos) = char (zext (str(ctos)))
+   ctos = ctos - 1
+
+   return
+   end
+#-t-  ctos          123  local  09/22/80  15:39:02
+#-h-  stoc          123  local  09/22/80  15:39:03
+# stoc - convert Fortran-77 string to Ratfor string
+
+   integer function stoc (fstr, str)
+   CHARACTER*(*) fstr
+   character str(ARB)
+   integer l
+
+   l = len (fstr)
+   for (stoc = 1; stoc <= l; stoc = stoc + 1)
+      str(stoc) = ichar (fstr(stoc:stoc))
+   str(l+1) = EOS
+
+   return
+   end
+#-t-  stoc          123  local  09/22/80  15:39:03

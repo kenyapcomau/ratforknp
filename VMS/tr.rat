@@ -1,0 +1,92 @@
+#-h-  tr.r                       2503  local   12/24/80  15:11:51
+#-h-  tr                         1429  local   12/24/80  15:11:35
+ ## tr - transliterate characters on a file
+
+  #  include ratdef
+  define(MAXSET,100)
+
+ DRIVER(tr)
+
+    character getc
+    character arg(MAXLINE), c, from(MAXSET), to(MAXSET)
+    integer getarg, length, makset, xindex
+    integer allbut, collap, i, lastto
+
+    call query ("usage:  tr from to.")
+    if (getarg(1, arg, MAXLINE) == EOF)
+       call error('usage: tr from to.')
+    else if (arg(1) == NOT) {
+       allbut = YES
+       if (makset(arg, 2, from, MAXSET) == NO)
+          call error('from: too large.')
+       }
+    else {
+       allbut = NO
+       if (makset(arg, 1, from, MAXSET) == NO)
+          call error('from: too large.')
+       }
+    if (getarg(2, arg, MAXLINE) == EOF)
+       to(1) = EOS
+    else if (makset(arg, 1, to, MAXSET) == NO)
+          call error('to: too large.')
+
+    lastto = length(to)
+    if (length(from) > lastto | allbut == YES)
+       collap = YES
+    else
+       collap = NO
+    repeat {
+       i = xindex(from, getc(c), allbut, lastto)
+       if (collap == YES & i >= lastto & lastto > 0) {  # collapse
+          call putc(to(lastto))
+          repeat
+             i = xindex(from, getc(c), allbut, lastto)
+             until (i < lastto)
+          }
+       if (c == EOF)
+          break
+       if (i > 0 & lastto > 0)   # translate
+          call putc(to(i))
+       else if (i == 0)      # copy
+          call putc(c)
+                   # else delete
+       }
+
+ #***
+    DRETURN
+    end
+#-t-  tr                         1429  local   12/24/80  15:11:35
+#-h-  makset                      300  local   12/24/80  15:11:35
+ ## makset - make set from  array(k)  in  set
+    integer function makset(array, k, set, size)
+    integer addset
+    integer i, j, k, size
+    character array(ARB), set(size)
+
+    i = k
+    j = 1
+    call filset(EOS, array, i, set, j, size)
+    makset = addset(EOS, set, j, size)
+    return
+    end
+#-t-  makset                      300  local   12/24/80  15:11:35
+#-h-  xindex                      378  local   12/24/80  15:11:36
+ ## xindex - invert condition returned by index
+    integer function xindex(array, c, allbut, lastto)
+    character array(ARB), c
+    integer index
+    integer allbut, lastto
+    external index
+
+    if (c == EOF)
+       xindex = 0
+    else if (allbut == NO)
+       xindex = index(array, c)
+    else if (index(array, c) > 0)
+       xindex = 0
+    else
+       xindex = lastto + 1
+    return
+    end
+#-t-  xindex                      378  local   12/24/80  15:11:36
+#-t-  tr.r                       2503  local   12/24/80  15:11:51

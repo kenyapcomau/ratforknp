@@ -1,0 +1,394 @@
+#-h-  spell.r                    8717  local   12/05/80  17:09:36
+#-h-  defns                       263  local   12/05/80  16:51:17
+ define(MAX_DIR_ENTRIES,6000)
+ define(MAX_CHARS,60000)
+ define(DICTIONARY_FILE,"dict")
+ define(DICTIONARY_INDEX,"dictdx")
+			#definitions for indexing
+ define(DEFAULT_WIDTH,25)
+ define(DEFAULT_DIF,10)
+ define(DEFAULT_JUSTFY,LEFT)
+ define(LEFT,0)
+ define(RIGHT,1)
+#-t-  defns                       263  local   12/05/80  16:51:17
+#-h-  spell                       530  local   12/05/80  16:51:17
+
+DRIVER(spell)
+
+ integer i, status, unit
+ integer getarg, equal, open
+ character file(FILENAMESIZE)
+
+ string minust "-"
+
+ call query ("spell [files].")
+ call lodidx
+ i = 1
+ repeat
+    {
+    status = getarg(i, file, FILENAMESIZE)
+    if (status == EOF)
+	if (i > 1)
+	    break
+	else
+	    unit = STDIN
+    else if (equal(file, minust) == YES)
+	unit = STDIN
+    else
+	{
+	unit = open(file, READ)
+	if (unit == ERR)
+	    call cant(file)
+	}
+    call dospel(unit)
+    if (unit != STDIN)
+	call close(unit)
+    i = i + 1
+    }
+
+DRETURN
+ end
+#-t-  spell                       530  local   12/05/80  16:51:17
+#-h-  inject                      436  local   12/05/80  16:51:18
+ ## inject - inject key and address info into table
+ integer function inject (key, addr)
+ character key(ARB)
+ integer addr(2), i
+ integer length
+ 
+ include "cspell.i"
+ 
+ i = 1
+ if (freep > MAX_DIR_ENTRIES |
+     (length(key) + freec + 1) > MAX_CHARS)
+	return(ERR)
+ strptr(freep) = freec
+ call stcopy (key, 1, charay, freec)
+ linptr (1, freep) = addr(1)
+ linptr (2, freep) = addr(2)
+ freep = freep + 1
+ nlines = nlines + 1
+ return (OK)
+ end
+#-t-  inject                      436  local   12/05/80  16:51:18
+#-h-  lodidx                     1040  local   12/05/80  16:51:18
+# load dictionary index file
+ subroutine lodidx
+
+ character buf(MAXLINE), key(30)
+#character file(FILENAMESIZE)
+ integer i, addr(2)
+ integer open, getlin, getwrd, ctoi, inject
+ integer dx
+
+ include "cspell.i"
+
+ string dictdx  DICTIONARY_INDEX
+ string dict DICTIONARY_FILE
+
+ freep = 1		#initialize
+ freec = 1
+ nlines = 0
+ 
+			#open dictionary file
+ #call getdir(BINDIRECTORY, LOCAL, file)
+ #call concat(file, dict, file)
+ #dunit = open(file, READ)
+  dunit = open(dict, READ)
+  if (dunit == ERR)
+    call cant(dict)
+ 
+			#attempt to open dictionary index file
+ #call getdir(BINDIRECTORY, LOCAL, file)
+ #call concat(file, dictdx, file)
+ #dx = open(file, READ)
+  dx = open(dictdx, READ)
+  if (dx == ERR)		#create dictionary index if not there
+	call dodx (dictdx)
+  else				# read dictionary index file
+	{
+	while (getlin (buf, dx) != EOF)
+		{
+		i = 1
+		junk = getwrd (buf, i, key)
+		addr(1) = ctoi(buf, i)
+		addr(2) = ctoi(buf, i)
+		if (inject(key, addr) == ERR)
+			call error ("dictionary index too large.")
+		}
+	}
+ 
+  call close(dx)
+
+ return
+ end
+#-t-  lodidx                     1040  local   12/05/80  16:51:18
+#-h-  binsrc                      493  local   12/05/80  16:51:18
+ integer function binsrc(word)
+
+ character word(ARB)
+ integer first, last, i, m
+ integer strcmp
+
+ include "cspell.i"
+
+ m = strptr(nlines)
+ if (strcmp(word, charay(m)) > 0)
+    return(nlines)
+ m = strptr(1)
+ if (strcmp(word, charay(m)) < 0)
+    return(1)
+ first = 1
+ last = nlines
+ while ((last - first) > 1)
+    {
+    i = (first + last) / 2
+    m = strptr(i)
+    switch (strcmp(word, charay(m)))
+	{
+	case	-1:	last = i
+	case	0:	{last = i; first = i}
+	case	1:	first = i
+	}
+    }
+ return(first)
+ end
+#-t-  binsrc                      493  local   12/05/80  16:51:18
+#-h-  findwd                      642  local   12/05/80  16:51:18
+ integer function findwd(word)
+
+ character word(ARB)
+ integer i, junk, n, addr(2)
+ integer getlin, binsrc, strcmp, equal, wdlook
+ character buf(MAXLINE)
+
+ include "cspell.i"
+
+ if (wdlook(word) == YES)		# seen this mis-spelled word before
+    return(NO)
+ i = binsrc(word)
+ addr(1) = linptr(1, i)
+ addr(2) = linptr(2, i)
+ call seek(addr, dunit)
+ for (n=getlin(buf,dunit); n != EOF; n=getlin(buf,dunit))
+    {
+    buf(n) = EOS
+    if (strcmp(word, buf) <= 0)
+	break
+    }
+ if (n == EOF)
+    buf(1) = EOS
+ if (equal(word, buf) == NO)
+    {
+    call wdstal(word)			# install mis-spelled word
+    findwd = NO
+    }
+ else
+    findwd = YES
+
+ return
+ end
+#-t-  findwd                      642  local   12/05/80  16:51:18
+#-h-  alphan                      149  local   12/05/80  16:51:19
+ integer function alphan(c)
+
+ character c, t
+ character type
+
+ t = type(c)
+ if (t == LETTER | t == DIGIT)
+    return(YES)
+ else
+    return(NO)
+
+ end
+#-t-  alphan                      149  local   12/05/80  16:51:19
+#-h-  gtword                      345  local   12/05/80  16:51:19
+ integer function gtword(buf, i, word, start)
+
+ integer i, start, j
+ character buf(ARB), word(ARB)
+ integer alphan, length
+
+ while (alphan(buf(i)) == NO)
+    if (buf(i) == EOS)
+	break
+    else
+	i = i + 1
+ start = i
+ for (j=1; alphan(buf(i)) == YES; j=j+1)
+    {
+    word(j) = buf(i)
+    i = i + 1
+    }
+ word(j) = EOS
+ return(length(word))
+ end
+#-t-  gtword                      345  local   12/05/80  16:51:19
+#-h-  wdlook                      235  local   12/05/80  16:51:19
+ integer function wdlook(word)
+
+ character word(ARB)
+ integer i, j
+ integer equal
+
+ include "cspell.i"
+
+ for (i=nlines+1; i < freep; i=i+1)
+    {
+    j = strptr(i)
+    if (equal(word, charay(j)) == YES)
+	return(YES)
+    }
+ return(NO)
+ end
+#-t-  wdlook                      235  local   12/05/80  16:51:19
+#-h-  wdstal                      404  local   12/05/80  16:51:19
+ subroutine wdstal(word)
+
+ character word(ARB)
+ integer i
+ integer length
+
+ include "cspell.i"
+
+ if (freep <= MAX_DIR_ENTRIES)
+    {
+    i = freec + length(word)
+    if (i <= MAX_CHARS)			# word will fit
+	{
+	strptr(freep) = freec		# fill in pointer
+	freep = freep + 1		# bump pointer
+	call stcopy(word, 1, charay, freec)	# copy word, bumping freec
+	freec = freec + 1		# point past EOS
+	}
+    }
+
+ return
+ end
+#-t-  wdstal                      404  local   12/05/80  16:51:19
+#-h-  dospel                      711  local   12/05/80  16:51:19
+ subroutine dospel(unit)
+
+ integer i, m, n, iferr, j, start, unit
+ integer getlin, findwd, gtword
+ character buf(MAXLINE), word(MAXLINE), errbuf(MAXLINE)
+
+ include "cspell.i"
+
+ for (n=getlin(buf,unit); n != EOF; n=getlin(buf,unit))
+    {
+    call putlin(buf, STDOUT)
+    for (j=1; buf(j) != EOS; j=j+1)
+	if (buf(j) == TAB)
+	    errbuf(j) = TAB
+	else if (buf(j) == NEWLINE)
+	    errbuf(j) = NEWLINE
+	else
+	    errbuf(j) = BLANK
+	errbuf(j) = EOS
+    i = 1
+    iferr = NO
+    while (gtword(buf, i, word, start) > 0)
+	{
+	call fold(word)
+	if (findwd(word) == NO)
+	    {
+	    iferr = YES
+	    for (j=start; j < i; j=j+1)
+		errbuf(j) = STAR
+	    }
+	}
+    if (iferr == YES)
+	call putlin(errbuf, STDOUT)
+    }
+
+ return
+ end
+#-t-  dospel                      711  local   12/05/80  16:51:19
+#-h-  doline                      154  local   12/05/80  16:51:20
+ integer function doline(n, dif)
+
+ integer n, dif
+
+
+ if (dif == 1)
+    return(YES)
+ else if (mod(n, dif) == 1)
+    return(YES)
+ else
+    return(NO)
+
+ end
+#-t-  doline                      154  local   12/05/80  16:51:20
+#-h-  outlin                      493  local   12/05/80  16:51:20
+ subroutine outlin (word, addr, justfy, out)
+
+ character word(ARB)
+ filedes out
+ integer justfy
+ integer addr(2), j
+ integer length
+
+ if (justfy == RIGHT)
+    for (j=length(word) + 1; j <= width; j=j+1)
+	call putch(BLANK, out)
+ call putlin(word, out)
+ if (justfy == LEFT)
+    for (j=length(word) + 1; j <= width; j=j+1)
+	call putch(BLANK, out)
+ call putch(BLANK, out)
+ call putint (addr(1), 1, out)
+ call putch(BLANK, out)
+ call putint(addr(2), 1, out)
+ call putch(NEWLINE, out)
+
+ return
+ end
+#-t-  outlin                      493  local   12/05/80  16:51:20
+#-h-  dodx                        974  local   12/05/80  16:51:20
+ ## dodx - create dictionary index file for 'spell' tool
+ subroutine dodx (name)
+ character name(ARB), buf(MAXLINE), key(30), oldkey(30)
+ integer n, i, addr(2), oaddr(2)
+ integer create, getlin, doline, getwrd, inject
+ filedes dx
+ 
+ include "cspell.i"
+ 
+ dx = create (name, WRITE)
+ if (dx == ERR)
+ 	call cant (name)
+  n = 0
+  oldkey(1) = EOS
+  oaddr(1) = 0
+  oaddr(1) = 0
+  repeat
+     {
+     call note(addr, dunit)
+     if (getlin(buf, dunit) == EOF)
+ 	break
+     n = n + 1
+     i = 1
+     junk = getwrd (buf, i, key)
+     if (doline (n, DEFAULT_DIF) == YES)
+ 	{
+        call outlin(key, addr, DEFAULT_JUSTIFY, dx)
+ 	if (inject(key, addr) == ERR)
+ 		call error ("dictionary index too large.")
+ 	}
+    call scopy (key, 1, oldkey, 1)
+    oaddr(1) = addr(1)
+    oaddr(2) = addr(2)
+     }
+  
+  if (doline(n, DEFAULT_DIF) == NO)
+ 	{
+ 	call outlin (oldkey, oaddr, DEFAULT_JUSTFY, dx)
+ 	if (inject(oldkey, oaddr) == ERR)
+ 		call error ("dictionary index too large.")
+ 	}
+ return
+ end
+#-t-  dodx                        974  local   12/05/80  16:51:20
+#-t-  spell.r                    8717  local   12/05/80  17:09:36

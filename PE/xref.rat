@@ -1,0 +1,471 @@
+# xref - make cross reference list of named files
+
+define(character,integer)	# define character data type
+define(ARB,*)
+define(STDIN,7)		# standard input file
+define(STDOUT,6)	# standard output file
+define(MAXCARD,80)
+define(MAXLINE,81)
+define(DIGIT,DIG0)
+define(EOF,-1)
+define(EOS,0)
+define(NEWLINE,10)
+define(BLANK,32)
+define(MINUS,45)
+define(BIGA,65)
+define(BIGZ,90)
+define(DIG0,48)
+define(DIG1,49)
+define(DIG2,50)
+define(DIG3,51)
+define(DIG4,52)
+define(DIG5,53)
+define(DIG6,54)
+define(DIG7,55)
+define(DIG8,56)
+define(DIG9,57)
+define(LETA,97)
+define(LETZ,122)
+define(LETTER,LETA)
+define(NO,0)
+define(MAXCHARS,20)	# max nbr of chars when converting
+define(MAXNAME,30)	# max size of file name
+
+# layout of tree nodes
+define(LLINK,0)		# pointer to left subtree
+define(RLINK,1)		# pointer to right subtree
+define(LNLIST,2)	# pointer to list of references
+define(LAST,3)		# pointer to last reference entered
+define(ENTRY,4)		# name (string)
+define(TNODESIZE,5)	# size of node = TNODESIZE + length(name) + 1
+
+# layout of linked list nodes
+define(LINENUM,0)	# line number
+define(LINK,1)		# pointer to next line number
+define(LNODESIZE,2)
+
+define(MAXBUF,15000)
+define(LINESIZE,80)	# length of output lines (see pentry)
+define(MAXTOK,15)	# maximum token size (see pentry)
+define(MAXNUM,5)	# size of line number entry (see pentry)
+
+implicit none
+
+call carcon(STDOUT,0)
+call doxref(STDIN)
+end
+
+# balloc - allocate n words in storage array buf; return index
+
+integer function balloc(n)
+implicit none
+integer n
+include "cxref.i"
+
+nextbf = nextbf + n
+if (nextbf > MAXBUF)
+	stop 'Out of storage'
+return(nextbf - n)
+end
+
+# doxref - generate cross reference list for file fd
+
+subroutine doxref(fd)
+implicit none
+integer fd, lineno
+integer t, root
+character gettok
+character token(MAXTOK)
+include "cxref.i"
+
+root = 0
+nextbf = 1
+lineno = 1
+repeat {
+	t = gettok(token, MAXTOK, fd)
+	if (t == EOF)
+		break
+	if (t == LETTER) {
+		call instl(token, lineno, root)
+		}
+	else if (t == NEWLINE)
+		lineno = lineno + 1
+	}
+call tprint(root)
+return
+end
+
+# gettok - get text token from file fd
+
+character function gettok(token, size, fd)
+implicit none
+character token(ARB)
+integer size, fd
+character getch, type
+integer i
+character c, peek
+data peek /0/
+
+if (peek == 0)		# check for lookahead
+	c = getch(c, fd)
+else {
+	c = peek
+	peek = 0
+	}
+for (; c != EOF; c = getch(c, fd)) {
+	gettok = type(c)
+	if (gettok == LETTER) {	# start of name
+		token(1) = c
+		for (i = 2; getch(c, fd) != EOF; i = i + 1)
+			if (type(c) == LETTER | type(c) == DIGIT) {
+				if (i < size)
+					token(i) = c
+				}
+			else
+				break
+		peek = c	# went one too far
+		if (i <= size)
+			token(i) = EOS
+		else
+			token(size) = EOS
+		return(LETTER)
+		}
+	else if (gettok == NEWLINE) {	# newline must be returned
+		peek = 0
+		return(NEWLINE)
+		}
+	}
+peek = 0
+return(EOF)
+end
+
+# icopys - copy integer string at from(i) to char string at to(j)
+
+subroutine icopys(from, i, to, j)
+implicit none
+integer from(ARB)
+character to(ARB)
+integer i, j, k1, k2
+
+k2 = j
+for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+	to(k2) = from(k1)
+	k2 = k2 + 1
+	}
+to(k2) = EOS
+return
+end
+
+# instl - install name in tree with reference on lineno; update tree
+
+subroutine instl(name, lineno, tree)
+implicit none
+character name(ARB), temp(MAXNAME)
+integer lineno, tree
+integer cond, p, q
+integer balloc, strcmp, length
+include "cxref.i"
+
+p = tree
+for (q = 0; p != 0; p = buf(q)) {
+	call icopys (buf, p+ENTRY, temp, 1)	# convert from int to char
+	cond = strcmp(name, temp)
+	if (cond == 0) {
+		q = balloc(LNODESIZE)		# add a new element onto list
+		buf(q+LINENUM) = lineno
+		buf(q+LINK) = 0
+		buf(buf(p+LAST)+LINK) = q
+		buf(p+LAST) = q
+		return
+		}
+	else if (cond < 0)
+		q = p + LLINK
+	else
+		q = p + RLINK
+	}
+p = balloc(TNODESIZE+length(name)+1)	# allocate and fill in new node
+buf(p+LLINK) = 0
+buf(p+RLINK) = 0
+call scopyi(name, 1, buf, p+ENTRY)
+if (q == 0)
+	tree = p
+else
+	buf(q) = p
+q = balloc(LNODESIZE)	# insert first reference
+buf(q+LINENUM) = lineno
+buf(q+LINK) = 0
+buf(p+LNLIST) = q
+buf(p+LAST) = q
+return
+end
+
+# pentry - print name and list of references
+
+subroutine pentry(name, list)
+implicit none
+character name(ARB)
+integer list
+integer i, len
+include "cxref.i"
+
+call putstr(name, -MAXTOK - 1, STDOUT)
+len = MAXTOK + 1
+for (i = list; i != 0; i = buf(i+LINK)) {
+	if (len > LINESIZE - MAXNUM) {
+		call putc(NEWLINE)
+		call putstr(EOS, -MAXTOK - 1, STDOUT)
+		len = MAXTOK + 1
+		}
+	call putint(buf(i+LINENUM), MAXNUM, STDOUT)
+	len = len + MAXNUM
+	}
+if (len <= LINESIZE)
+	call putc(NEWLINE)
+return
+end
+
+# scopyi - copy char string at from(i) to integer string to(j)
+
+subroutine scopyi(from, i, to, j)
+implicit none
+character from(ARB)
+integer to(ARB)
+integer i, j, k1, k2
+
+k2 = j
+for (k1 = i; from(k1) != EOS; k1 = k1 + 1) {
+	to(k2) = from(k1)
+	k2 = k2 + 1
+	}
+to(k2) = EOS
+return
+end
+
+# tprint - destructively print tree, left subtree first
+
+subroutine tprint(tree)
+implicit none
+integer tree
+integer p, q, sp
+character temp(MAXNAME)
+include "cxref.i"
+
+sp = 0
+p = tree
+repeat {
+	while (p != 0)
+		if (buf(p+LLINK) != 0) {
+			q = buf(p+LLINK)
+			buf(p+LLINK) = sp
+			sp = p
+			p = q
+			}
+		else {
+			call icopys (buf, p+ENTRY, temp, 1)
+			call pentry(temp, buf(p+LNLIST))
+			p = buf(p+RLINK)
+			}
+	if (sp == 0)
+		return
+	call icopys (buf, sp+ENTRY, temp, 1)
+	call pentry(temp, buf(sp+LNLIST))
+	p = buf(sp+RLINK)
+	sp = buf(sp+LLINK)
+	}
+return
+end
+
+# strcmp - compare 2 strings; return -1 if <, 0 if =, +1 if >
+
+integer function strcmp (str1, str2)
+implicit none
+character str1 (ARB), str2 (ARB)
+integer i
+
+for (i = 1; str1 (i) == str2 (i); i = i + 1)
+	if (str1 (i) == EOS)
+		return (0)
+if (str1 (i) == EOS)
+	strcmp = -1
+else if (str2 (i) == EOS)
+	strcmp = + 1
+else if (str1 (i) < str2 (i))
+	strcmp = -1
+else
+	strcmp = +1
+return
+end
+
+# type - determine type of character
+
+character function type (c)
+implicit none
+character c
+
+if ((LETA <= c & c <= LETZ) | (BIGA <= c & c <= BIGZ))
+	type = LETTER
+else if (DIG0 <= c & c <= DIG9)
+	type = DIGIT
+else
+	type = c
+return
+end
+
+# putint - output integer in specified field
+
+subroutine putint (n, w, fd)
+implicit none
+integer n, w
+integer fd
+character chars (MAXCHARS)
+integer junk
+integer intoc
+
+junk = intoc (n, chars, MAXCHARS)
+call putstr (chars, w, fd)
+return
+end
+
+# putstr - output character string in specified field
+
+subroutine putstr (str, w, fd)
+implicit none
+character str (ARB)
+integer w
+integer fd
+character length
+integer i, len
+
+len = length (str)
+for (i = len + 1; i <= w; i = i + 1)
+	call putch (BLANK, fd)
+for (i = 1; i <= len; i = i + 1)
+	call putch (str (i), fd)
+for (i = (-w) - len; i > 0; i = i - 1)
+	call putch (BLANK, fd)
+return
+end
+
+# intoc - convert integer  int  to char string in  str
+
+integer function intoc (int, str, size)
+implicit none
+integer int, size
+character str (ARB)
+integer mod
+integer d, i, intval, j, k
+# string digits "0123456789"
+character digits (11)
+data digits (1) /DIG0/,
+	digits (2) /DIG1/,
+	digits (3) /DIG2/,
+	digits (4) /DIG3/,
+	digits (5) /DIG4/,
+	digits (6) /DIG5/,
+	digits (7) /DIG6/,
+	digits (8) /DIG7/,
+	digits (9) /DIG8/,
+	digits (10) /DIG9/,
+	digits (11) /EOS/
+
+intval = iabs (int)
+str (1) = EOS
+i = 1
+repeat {			# generate digits
+	i = i + 1
+	d = mod (intval, 10)
+	str (i) = digits (d+1)
+	intval = intval / 10
+	} until (intval == 0 | i >= size)
+if (int < 0 & i < size) {	# then sign
+	i = i + 1
+	str (i) = MINUS
+	}
+intoc = i - 1
+for (j = 1; j < i; j = j + 1) {	# then reverse
+	k = str (i)
+	str (i) = str (j)
+	str (j) = k
+	i = i - 1
+	}
+return
+end
+
+# length - compute length of string
+
+integer function length (str)
+implicit none
+character str (ARB)
+
+for (length = 0; str (length+1) != EOS; length = length + 1)
+	;
+return
+end
+
+# getch - getc characters from unit fd
+
+character function getch(c, fd)
+implicit none
+character c
+integer fd
+character buf(MAXLINE)
+integer i, lastc
+
+data lastc/MAXLINE/
+data buf(MAXLINE)/NEWLINE/
+
+if(buf(lastc) == NEWLINE | lastc >= MAXLINE) {
+	read(fd,9050,end=10)(buf(i),i=1,MAXCARD)
+9050	format(MAXCARD a1)
+	lastc=0
+	do i=1,MAXCARD{
+		call ilbyte(buf(i),buf(i),0)
+		if(buf(i) != BLANK)
+			lastc=i
+		}
+	buf(lastc + 1) = NEWLINE
+	lastc = 0
+	}
+lastc = lastc + 1
+c = buf(lastc)
+getch = c
+return
+
+10 c = EOF
+getch = EOF
+return
+end
+
+# putch - puts character on unit fd
+
+subroutine putch(c, fd)
+implicit none
+character c
+integer fd
+character buf(MAXLINE)
+integer i,lastc
+data lastc/0/
+
+if(lastc >= MAXCARD | c == NEWLINE) {
+	do i=1,lastc
+		call isbyte(buf(i),buf(i),0)
+	write(fd,9060)(buf(i),i=1,lastc)
+	9060 format(MAXCARD a1)
+	lastc=0
+	}
+if(c != NEWLINE){
+	lastc = lastc+1
+	buf(lastc) = c
+	}
+return
+end
+
+# putc - puts character in unit STDOUT
+
+subroutine putc(c)
+implicit none
+character c
+
+call putch(c, STDOUT)
+return
+end

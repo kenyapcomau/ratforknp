@@ -1,0 +1,743 @@
+#-h-  version1                  24336  local   12/10/80  14:11:45
+#-h-  ar.r                      17596  local   11/26/80  14:26:49
+#-h-  ar                         2027  local   11/26/80  14:24:54
+# ar - archive file maintainer
+
+   define(ON,)
+   define(OFF,#)
+   define(FOLDF,ON)           # if on, fold file names to lower case
+
+   define(MAXFILES,24)        # maximum number of files processable
+
+   define(DELETE_CMD,LETD)    # delete member from archive (by name only)
+   define(PRINT_CMD,LETP)     # print archive members
+   define(TABLE_CMD,LETT)     # print table of contents
+   define(UPDATE_CMD,LETU)    # update archive member
+   define(VERBOSE_CMD,LETV)   # controls amount of output
+   define(EXTRACT_CMD,LETX)   # extract archive member
+
+   define(USAGE_MESSAGE,"usage:  ar (dptux)[v] archive [files].")
+
+   define(HEADER_STRING,"#-h-")
+   define(TRAILER_STRING,"#-t-")
+   define(ARC_TEMP,"arctemp.tmp")
+   define(NAMESIZE,20)         # size of name allowed in header
+
+   define(ASCII_STRING,"ascii ")
+   define(LOCAL_STRING,"local ")
+   define(BINARY_STRING,"binary")
+
+  # The file size (in characters) is computed for storage in the
+  # archive headers, although this information is not used.  
+  # If desired, this feature can be left out, thus speeding up
+  # up execution.  To do it:
+  #          define(SPEED_UP,)
+ 
+ 
+ 
+   DRIVER(ar)
+
+   include "carch.i"
+
+   character aname (FILENAMESIZE), comand (MAXARG)
+
+   integer i
+   integer getarg
+
+   errcnt = 0
+
+   call query (USAGE_MESSAGE)
+
+   if (getarg (1, comand, MAXARG) == EOF
+     | getarg (2, aname, FILENAMESIZE) == EOF)
+      call error (USAGE_MESSAGE)
+
+   call getfns
+
+   call fold (comand)
+
+   if (comand (1) == MINUS)      # skip leading '-' if present
+      i = 2
+   else
+      i = 1
+   if (comand (i + 1) == VERBOSE_CMD)
+      verbos = YES
+   else if (comand (i + 1) == EOS)
+      verbos = NO
+   else
+      call error (USAGE_MESSAGE)
+
+   if (comand (i) == UPDATE_CMD)
+      call update (aname)
+   else if (comand (i) == TABLE_CMD)
+      call table (aname)
+   else if (comand (i) == EXTRACT_CMD | comand (i) == PRINT_CMD)
+      call extrac (aname, comand (i))
+   else if (comand (i) == DELETE_CMD)
+      call delete (aname)
+   else
+      call error (USAGE_MESSAGE)
+
+   DRETURN
+   end
+#-t-  ar                         2027  local   11/26/80  14:24:54
+#-h-  addfil                      711  local   11/26/80  14:24:55
+# addfil - add file 'name' to archive open on 'fd'
+
+   subroutine addfil (name, fd)
+   character name (ARB)
+   filedes fd
+
+   include "carch.i"
+
+   character head(MAXLINE), trail(MAXLINE)
+
+   filedes nfd
+   filedes open
+
+
+   nfd = open (name, READ)
+   if (nfd == ERR) {
+      call putlin (name, ERROUT)
+      call remark (":  can't add.")
+      errcnt = errcnt + 1
+      return
+      }
+
+   if (errcnt == 0) {
+      call makhdr (head, name)
+      if (verbos == YES) {
+         call putlin (name, STDOUT)
+         call putch (NEWLINE, STDOUT)
+         }
+      call putlin (head, fd)
+      call cpin (nfd, fd)
+      call maktrl (head, trail)
+      call putlin (trail, fd)
+      }
+
+   call close (nfd)
+   return
+   end
+#-t-  addfil                      711  local   11/26/80  14:24:55
+#-h-  cpin                        253  local   11/26/80  14:24:55
+# cpin --- copy a file into an archive
+# may have to be adjusted to allow for binary files
+
+   subroutine cpin (fd, afd)
+   filedes fd, afd
+
+   character c
+
+   character getch
+
+
+   while (getch(c, fd) != EOF)
+      call putch (c, afd)
+
+   return
+   end
+#-t-  cpin                        253  local   11/26/80  14:24:55
+#-h-  cpmemb                      438  local   11/26/80  14:24:55
+# cpmemb --- copy archive element from one archive to another
+
+   subroutine cpmemb (oldafd, newafd)
+   filedes oldafd, newafd
+
+   include "carch.i"
+
+   character line (MAXLINE)
+
+   integer getlin, elend
+
+
+   while (getlin (line, oldafd) != EOF) {
+      call putlin (line, newafd)
+      if (elend (line) == YES)
+         return
+      }
+
+   call remark ("archive integrity in doubt - missing trailer.")
+   errcnt = errcnt + 1
+   return
+   end
+#-t-  cpmemb                      438  local   11/26/80  14:24:55
+#-h-  cpout                       499  local   11/26/80  14:24:56
+# cpout --- copy a file out of an archive
+
+   subroutine cpout (afd, fd)
+   filedes afd, fd
+
+   include "carch.i"
+
+   character line (MAXLINE)
+
+   integer start
+   integer getlin, elend, length
+
+
+
+   while (getlin (line, afd) != EOF) {
+      if (elend (line) == YES)
+         return      # we've copied the whole archive element
+      else
+         call putlin (line, fd)  # ordinary text
+      }
+
+   call remark ("archive integrity in doubt - missing trailer.")
+   errcnt = errcnt + 1
+   return
+   end
+#-t-  cpout                       499  local   11/26/80  14:24:56
+#-h-  delete                      754  local   11/26/80  14:24:56
+# delete - delete files from the archive
+
+   subroutine delete (aname)
+   character aname (ARB)
+
+   include "carch.i"
+
+   character tname (FILENAMESIZE)
+
+   filedes afd, tfd
+   filedes create, open
+
+   integer junk
+   integer remove
+
+   string tprefx ARC_TEMP
+
+   if (fcount <= 0)
+      call error ("delete by name only.")
+
+   afd = open (aname, READ)
+   if (afd == ERR)
+      call cant (aname)
+
+   call mkuniq (tprefx, tname)
+   tfd = create (tname, WRITE)
+   if (tfd == ERR)
+      call cant (tname)
+
+   call replac (afd, tfd, DELETE_CMD)
+   call notfnd
+
+   call close (afd)
+   call close (tfd)
+   if (errcnt == 0)
+      call amove (tname, aname)
+   else
+      call remark ("fatal errors - archive not altered.")
+   junk = remove (tname)
+
+   return
+   end
+#-t-  delete                      754  local   11/26/80  14:24:56
+#-h-  extrac                     1047  local   11/26/80  14:24:57
+# extrac - extract files from archive
+
+   subroutine extrac (aname, cmd)
+   character aname (ARB), cmd
+
+   include "carch.i"
+
+   character name (FILENAMESIZE), hdr (MAXLINE)
+
+   filedes afd, fd
+   filedes create, open
+
+   integer filarg, gethdr, equal
+
+   afd = open (aname, READ)
+   if (afd == ERR)
+      call cant (aname)
+
+   while (gethdr (afd, hdr, name) != EOF)
+
+      if (filarg (name) == NO)
+         call skipf (afd)
+
+      else {
+         if (verbos == YES) {
+            call putlin (name, STDOUT)
+            call putch (NEWLINE, STDOUT)
+            }
+
+         if (cmd == PRINT_CMD)
+            call cpout (afd, STDOUT)
+         else {
+            fd = create (name, WRITE)
+            if (fd != ERR) {
+               call cpout (afd, fd)
+               call close (fd)
+               }
+            else {
+               call putlin (name, ERROUT)
+               call remark (":  can't create.")
+               errcnt = errcnt + 1
+               call skipf (afd)
+               }
+            }
+
+         }
+
+   call notfnd
+   return
+   end
+#-t-  extrac                     1047  local   11/26/80  14:24:57
+#-h-  filarg                      367  local   11/26/80  14:24:57
+# filarg - see if name is present in argument list
+
+   integer function filarg (name)
+   character name (ARB)
+
+   include "carch.i"
+
+   integer i
+   integer equal
+
+   if (fcount <= 0)
+      return (YES)
+
+   for (i = 1; i <= fcount; i = i + 1)
+      if (equal (name, fname (1, i)) == YES) {
+         fstat (i) = YES
+         return (YES)
+         }
+
+   return (NO)
+   end
+#-t-  filarg                      367  local   11/26/80  14:24:57
+#-h-  fsize                       416  local   11/26/80  14:24:57
+# fsize - determine size of file (in lines)
+
+   integer function fsize (name)
+   character name (ARB)
+
+   filedes fd
+   filedes open
+
+   character line (MAXLINE)
+
+   integer l
+   integer getlin
+
+   fd = open (name, READ)
+   if (fd == ERR)
+      return (ERR)
+
+   fsize = 0
+   repeat {
+      l = getlin (line, fd)
+      if (l == EOF)
+         break
+      fsize = fsize + l
+      }
+
+   call close (fd)
+   return
+   end
+#-t-  fsize                       416  local   11/26/80  14:24:57
+#-h-  getfns                     1438  local   11/26/80  14:24:58
+# getfns - get file names into 'fname', check for duplicates
+
+   subroutine getfns
+
+   include "carch.i"
+
+   integer ap, fp, len, i
+   integer getarg, getlin
+
+   character line (MAXLINE)
+
+   integer equal
+
+   fp = 1
+
+   for (ap = 3; getarg (ap, fname (1, fp), FILENAMESIZE) != EOF; ap = ap + 1)
+      if (fname (1, fp) == MINUS & fname (2, fp) == EOS) {
+         while (fp <= MAXFILES) {
+            len = getlin (fname (1, fp), STDIN)
+            if (len == EOF)
+               break
+            fname (len, fp) = EOS         # remove the NEWLINE
+            FOLDF call fold (fname (1, fp))
+            fp = fp + 1
+            }
+         if (fp > MAXFILES)
+            if (getlin (line, STDIN) != EOF)
+               call error ("too many file names.")
+         }
+      else {
+         FOLDF call fold (fname (1, fp))
+         fp = fp + 1
+         if (fp > MAXFILES)
+            if (getarg (ap + 1, line, MAXLINE) != EOF)
+               call error ("too many file names.")
+         }
+
+   fcount = fp - 1
+   for (fp = 1; fp <= fcount; fp = fp + 1)
+      fstat (fp) = NO
+
+   for (fp = 1; fp < fcount; fp = fp + 1)
+      for (i = fp + 1; i <= fcount; i = i + 1)
+         if (equal (fname (1, fp), fname (1, i)) == YES) {
+            call putlin (fname (1, i), ERROUT)
+            call remark (":  duplicate file name.")
+            errcnt = errcnt + 1
+            }
+
+   if (errcnt != 0)
+      call error ("fatal errors - archive not altered.")
+
+   return
+   end
+#-t-  getfns                     1438  local   11/26/80  14:24:58
+#-h-  gethdr                      629  local   11/26/80  14:24:58
+# gethdr - get header information from archive member in 'fd'
+
+   integer function gethdr (fd, hdr, name)
+   filedes fd
+   character hdr (ARB), name (ARB)
+
+   include "carch.i"
+
+   character text (FILENAMESIZE)
+
+   integer i, len
+   integer getwrd, equal, ctoi, getlin
+
+   string hdrstr HEADER_STRING
+
+   if (getlin (hdr, fd) == EOF)
+      return (EOF)
+   call fold (hdr)
+
+   i = 1
+
+   len = getwrd (hdr, i, text)
+   if (equal (text, hdrstr) == NO) {
+      call remark ("archive not in proper format.")
+      errcnt = errcnt + 1
+      return (EOF)
+      }
+
+   call savhdr (hdr)
+   len = getwrd (hdr, i, name)
+
+   return (YES)
+   end
+#-t-  gethdr                      629  local   11/26/80  14:24:58
+#-h-  gettyp                      142  local   11/26/80  14:24:59
+# gettyp - determine file type (ASCII, LOCAL, or BINARY)
+
+   integer function gettyp (name)
+   character name (ARB)
+
+   return (LOCAL)
+   end
+#-t-  gettyp                      142  local   11/26/80  14:24:59
+#-h-  makhdr                     1400  local   11/26/80  14:24:59
+# makhdr - make header line for an archive member
+
+   subroutine makhdr (head, name)
+   character head (ARB), name (ARB)
+
+   include "carch.i"
+
+   integer i, type, l, junk, now (7)
+   integer fsize, gettyp, itoc, length
+
+   character size (MAXCHARS), time (MAXLINE), date (MAXLINE)
+
+   string hdrstr HEADER_STRING
+   string blanks "  "
+   string astr ASCII_STRING
+   string lstr LOCAL_STRING
+   string bstr BINARY_STRING
+
+   i = 1
+   call stcopy (hdrstr, 1, head, i)
+   call stcopy (blanks, 1, head, i)
+   call stcopy (name, 1, head, i)
+   for (l = length(name) + 1; l <= NAMESIZE; l = l+1)
+           {
+           head(i) = BLANK
+           i = i + 1
+           }
+  ifnotdef(SPEED_UP,
+   for (l = itoc (fsize (name), size, MAXCHARS); l <= 10; l = l + 1) {
+      head (i) = BLANK
+      i = i + 1
+      }
+   call stcopy (size, 1, head, i)
+   call stcopy (blanks, 1, head, i)
+          )
+
+   type = gettyp (name)
+   if (type == ASCII)
+      call stcopy (astr, 1, head, i)
+   else if (type == LOCAL)
+      call stcopy (lstr, 1, head, i)
+  else if (type == BINARY)
+      call stcopy (bstr, 1, head, i)
+   else
+      call stcopy (astr, 1, head, i)
+
+   call stcopy (blanks, 1, head, i)
+   call getnow (now)
+   call fmtdat (date, time, now, 0)
+   call stcopy (date, 1, head, i)
+   call stcopy (blanks, 1, head, i)
+   call stcopy (time, 1, head, i)
+
+   head (i) = NEWLINE
+   head (i + 1) = EOS
+
+   return
+   end
+#-t-  makhdr                     1400  local   11/26/80  14:24:59
+#-h-  maktrl                      384  local   11/26/80  14:25:00
+# maktrl - make trailer line for an archive member
+
+   subroutine maktrl (head, trail)
+   character trail (ARB), head (ARB)
+   integer i, j, len
+   integer getwrd
+
+   include "carch.i"
+
+   string tstr TRAILER_STRING
+
+   i = 1
+   len = getwrd (head, i, trail)        # skip over header string
+   j = 1
+   call stcopy (tstr, 1, trail, j)
+   call stcopy (head, i, trail, j)
+   return
+   end
+#-t-  maktrl                      384  local   11/26/80  14:25:00
+#-h-  notfnd                      333  local   11/26/80  14:25:00
+# notfnd - print 'not found' message if member isn't in archive
+
+   subroutine notfnd
+
+   include "carch.i"
+
+   integer i
+
+   for (i = 1; i <= fcount; i = i + 1)
+      if (fstat (i) == NO) {
+         call putlin (fname (1, i), ERROUT)
+         call remark (":  not in archive.")
+         errcnt = errcnt + 1
+         }
+
+   return
+   end
+#-t-  notfnd                      333  local   11/26/80  14:25:00
+#-h-  elend                       384  local   11/26/80  14:25:01
+# elend --- see if string is end of archive element
+
+   integer function elend (str)
+ 
+   character str (ARB)
+   integer i
+   integer equal
+ 
+   include "carch.i"
+
+  string tstr TRAILER_STRING
+ 
+
+  for (i=1; tstr(i) != EOS; i=i+1)       # look for trailer string
+          if (tstr(i) != str(i) )
+                return(NO)
+  call skipbl (str, i)
+  return ( equal(str(i), chead) )
+   end
+#-t-  elend                       384  local   11/26/80  14:25:01
+#-h-  replac                      646  local   11/26/80  14:25:01
+# replac - replace or delete archive members
+
+   subroutine replac (afd, tfd, cmd)
+   filedes afd, tfd
+   character cmd
+
+   include "carch.i"
+
+   character hdr (MAXLINE), name (FILENAMESIZE)
+
+   integer gethdr, filarg
+
+   while (gethdr (afd, hdr, name) != EOF)
+      if (filarg (name) == YES) {
+         if (cmd == UPDATE_CMD)
+            call addfil (name, tfd)
+         if (verbos == YES & cmd == DELETE_CMD) {
+            call putlin (name, STDOUT)
+            call putch (NEWLINE, STDOUT)
+            }
+         call skipf (afd)
+         }
+      else {
+         call putlin (hdr, tfd)
+         call cpmemb (afd, tfd)
+         }
+
+   return
+   end
+#-t-  replac                      646  local   11/26/80  14:25:01
+#-h-  savhdr                      245  local   11/26/80  14:25:01
+# savhdr - save current header
+  subroutine savhdr (head)
+ 
+  include "carch.i"
+  character head(ARB)
+  integer i, len
+  integer getwrd
+
+  i = 1
+  len = getwrd (head, i, chead)
+  call skipbl (head, i)
+  call scopy (head, i, chead, 1)
+  return
+  end
+#-t-  savhdr                      245  local   11/26/80  14:25:01
+#-h-  skipf                       360  local   11/26/80  14:25:02
+# skipf --- skip current archive element on file afd
+
+   subroutine skipf (afd)
+   filedes afd
+
+   include "carch.i"
+
+   character line (MAXLINE)
+
+   integer getlin, elend
+
+
+   while (getlin (line, afd) != EOF)
+      if (elend (line) == YES)
+         return
+
+   call remark ("archive integrity in doubt - missing trailer.")
+   errcnt = errcnt + 1
+   return
+   end
+#-t-  skipf                       360  local   11/26/80  14:25:02
+#-h-  table                       464  local   11/26/80  14:25:02
+# table - print table of archive contents
+
+   subroutine table (aname)
+   character aname (ARB)
+
+   filedes afd
+   filedes open
+
+   character hdr (MAXLINE), name (FILENAMESIZE)
+
+   integer gethdr, filarg
+
+   afd = open (aname, READ)
+   if (afd == ERR)
+      call cant (aname)
+
+   while (gethdr (afd, hdr, name) != EOF) {
+      if (filarg (name) == YES)
+         call tprint (hdr)
+      call skipf (afd)
+      }
+
+   call close (afd)
+   call notfnd
+   return
+   end
+#-t-  table                       464  local   11/26/80  14:25:02
+#-h-  tprint                      593  local   11/26/80  14:25:02
+# tprint - print table entry for one archive member
+
+   subroutine tprint (hdr)
+   character hdr (ARB)
+
+   include "carch.i"
+
+   character name (FILENAMESIZE)
+
+   integer i, len
+   integer getwrd, length
+
+   i = 1
+   len = getwrd (hdr, i, name)      # skip the header string itself
+
+   len = getwrd (hdr, i, name)      # grab the filename
+
+   call putlin (name, STDOUT)
+   if (verbos == YES) {             # print other info only if asked
+      for (; hdr (i) != NEWLINE & hdr (i) != EOS; i = i + 1)
+         call putch (hdr (i), STDOUT)
+      }
+
+   call putch (NEWLINE, STDOUT)
+
+   return
+   end
+#-t-  tprint                      593  local   11/26/80  14:25:02
+#-h-  update                     1162  local   11/26/80  14:25:03
+# update - update existing files, add new ones at end
+
+   subroutine update (aname)
+   character aname (ARB)
+
+   include "carch.i"
+
+   filedes afd, tfd
+   filedes open, create
+
+   integer fp, junk
+   integer remove
+
+   character tname (FILENAMESIZE)
+
+   string tprefx ARC_TEMP
+
+   afd = open (aname, READ)
+   if (afd == ERR) {          # try to create a new archive
+      afd = create (aname, WRITE)
+      if (afd == ERR)
+         call cant (aname)
+      call close (afd)        # close and reopen to mark EOF
+      afd = open (aname, READ)
+      if (afd == ERR)
+         call cant (aname)
+      }
+
+   call mkuniq (tprefx, tname)
+   tfd = create (tname, WRITE)
+   if (tfd == ERR)
+      call cant (tname)
+
+   call replac (afd, tfd, UPDATE_CMD)        # update existing members
+
+   for (fp = 1; fp <= fcount; fp = fp + 1)   # add new members
+      if (fstat (fp) == NO) {
+         call addfil (fname (1, fp), tfd)
+         fstat (fp) = YES
+         }
+
+   call close (afd)
+   call close (tfd)
+
+   if (errcnt == 0)
+      call amove (tname, aname)
+   else {
+      call remark ("fatal errors - archive not altered.")
+      junk = remove (tname)
+      }
+
+   return
+   end
+#-t-  update                     1162  local   11/26/80  14:25:03
+#-t-  ar.r                      17596  local   11/26/80  14:26:49
+#-t-  version1                  24336  local   12/10/80  14:11:45

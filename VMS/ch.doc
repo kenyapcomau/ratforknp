@@ -1,0 +1,150 @@
+.bp 1
+.in 0
+.he 'CH (1)'4/7/78'CH (1)'
+.fo **-#-**
+.in 7
+.fi
+.ti -7
+NAME
+.br
+ch - make changes in text files
+.sp 1
+.ti -7
+SYNOPSIS
+.br
+ch [-ax] [expr ...] fromexpr [toexpr]
+.sp 1
+.ti -7
+DESCRIPTION
+.br
+Ch
+copies each line of the standard input to the standard output, globally
+substituting the text pattern "toexpr" for "fromexpr" on each line that
+satisfies matching criteria defined by the leading expressions "expr" and
+the switches. (A text pattern is a subset of a "regular expression"--see
+the "ed" writeup for a complete description.)  Three possible courses of
+action are taken depending upon the number of text patterns(n) found in
+the command line:
+.sp
+.in +5
+.ti -5
+n=1  The text pattern is assumed to be "fromexpr" with a null "toexpr";
+it is equivalent to the ed command
+.ti +10
+g/fromexpr/s///g
+.ti -5
+n=2  The first text pattern is "fromexpr", the second is "toexpr"; it
+is equivalent to the ed command
+.ti +10
+g/fromexpr/s//toexpr/g
+.ti -5
+n>=3 The (n-1)th pattern is "fromexpr", the nth is "toexpr" and patterns
+1...n-2 are used to determine the lines upon which to perform the
+substitution.  The default is that any line which matches any one of
+the n-2 leading expressions are eligible for substitution.  If the -a
+flag is specified, only lines which match all n-2 leading expressions in
+any order are eligible.  If the -x flag is specified, all lines which
+don't satisfy the above criteria are eligible. (See the writeup on find
+for more information.)  In particular, if n=3,
+.ti +10
+ch expr from to
+.br
+is equivalent to the ed command
+.ti +10
+g/expr/s/from/to/g
+.ti +10
+ch -x expr from to
+.br
+is equivalent to the ed command
+.ti +10
+x/expr/s/from/to/g
+.sp
+.in -5
+The substitution string "toexpr" may be a string of replacement
+characters, null to effect a deletion, or it may include the special
+"ditto" character "&" to put back the "fromexpr" string and thus
+effect an insertion.  If a deletion is desired with the multiple
+leading tag expressions, a "toexpr" of "" -i.e. quotes around an
+empty string may be used.
+
+A text pattern consists of the following elements:
+
+.nf
+c         literal character
+?         any character except newline
+%         beginning of line
+$         end of line (null string before newline)
+[...]     character class (any one of these characters)
+[!...]    negated character class (all but these characters)
+*         closure (zero or more occurrences of previous pattern)
+{...}     'tagged' (marked) pattern
+@c        escaped character (e.g., @%, @[, @*)
+
+.fi
+Any special meaning of characters in a text pattern is lost when
+escaped, inside [...], or for:
+
+.nf
+%         not at beginning
+$         not at end
+*         at beginning
+
+.fi
+A character class consists of zero or more of the following
+elements, surrounded by [ and ]:
+
+.nf
+c         literal character
+a-b       range of characters (digits, lower or upper case)
+!         negated character class if at beginning
+@c        escaped character (@! @- @@ @])
+
+.fi
+Special meaning of characters in a character class is lost when
+escaped or for
+
+.nf
+!         not at beginning
+-         at beginning or end
+
+.fi
+An escape sequence consists of the character @ followed by a single
+character:
+
+.nf
+@n        newline
+@t        tab
+@c        c (including @@)
+
+.fi
+For a complete description, see "Software Tools" pages 135-154.
+Care should be taken when using the characters % $ [ ] { } ! * @ and
+any shell characters
+in the text pattern. It is often necessary to enclose the
+entire substitution pattern in quotes.
+.sp 1
+.ti -7
+FILES
+.br
+None
+.sp 1
+.ti -7
+SEE ALSO
+.br
+sedit, find, tr, ed, the UNIX tool grep
+.sp 1
+.ti -7
+DIAGNOSTICS
+.br
+An error message is printed if the pattern given is illegal.
+.sp 1
+.ti -7
+AUTHORS
+.br
+Original from Kernighan and Plauger's "Software Tools", with
+modifications by Joe Sventek (Lawrence Berkeley Laboratory)
+.sp 1
+.ti -7
+BUGS/DEFICIENCIES
+.br
+A minus sign(dash[-]) may not start an expression.

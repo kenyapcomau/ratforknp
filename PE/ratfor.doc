@@ -1,0 +1,675 @@
+.bp 1
+.rm 70
+.in 0
+.he 'RATFOR'4/4/78'RATFOR
+.fo ''-%-''
+
+.ce
+RATFOR PRIMER
+
+.ti +5
+Ratfor is a preprocessor for Fortran.
+Its primary purpose is to encourage readable and well-structured code
+while taking advantage of the universality, portability, and
+efficiency of Fortran.
+This is done by providing the control structures not available in bare
+Fortran, and by improving the "cosmetics" of the language.
+
+.ti +5
+Ratfor allows for all the features of normal Fortran, plus makes
+available these control structures:
+.br
+.in +10
+.nf
+
+"if"-"else"
+"while", "for", and "repeat"-"until" for looping
+"break" and "next" for controlling loop exits
+statement grouping with braces
+
+.fi
+.br
+.in -10
+
+.ti +5
+The cosmetic aspects of Ratfor have been designed to make it concise
+and reasonably pleasing to the eye:
+.br
+.in +10
+.nf
+
+free form input
+unobtrusive comment convention
+translation of >, <=, etc. into .GT., .LE., etc.
+string data type
+quoted character strings
+"define" statement for symbolic constants
+"include" statement for including source files
+.fi
+.in -10
+
+.br
+
+.ti +5
+Ratfor is implemented as a preprocessor which translates the
+above features into Fortran, which can then be fed into almost
+any Fortran compiler.
+
+.ti +5
+Each of the Ratfor features will now be discussed in more detail.
+In the following, a "statement" is any legal statement in Fortran:
+assignment, declaration, subroutine call, I/O, etc., or any of
+the Ratfor statements themselves.
+Any Fortran or Ratfor statement or group of these can be enclosed
+in braces ({}) -- to make it a compound
+statement, which is then
+equivalent to a single statement and usable anywhere a single
+statement can be used.
+
+.bp
+.ce
+IF-ELSE
+
+.ti +5
+Ratfor provides an "else" statement to handle the construction
+"if a condition is true, do this thing, otherwise do that thing".
+The syntax is
+.br
+.in +10
+.nf
+
+if (legal Fortran condition)
+               statement(s)
+else
+               statement(s)
+
+.fi
+.br
+.in -10
+where the else part is optional.  The "legal Fortran condition" is
+anything that can legally go into a Fortran logical IF.
+The Ratfor statements may be one or more valid Ratfor or Fortran
+statements of any kind.
+If more than one statement is desired, the statements must be
+enclosed by braces.  For example,
+.nf
+
+.br
+.in +10
+if (a > b)
+               {
+               k = 1
+               call remark (...)
+               }
+else if (a < b)
+               {
+               k = 2
+               call remark (...)
+               }
+else
+               return
+
+.fi
+.in -10
+
+.bp
+.ce
+WHILE
+
+.ti +5
+Ratfor provides a while statement, which is simply a loop:
+"while some condition is true, repeat this group of statements".
+The syntax is
+.nf
+
+.br
+.in +10
+while (legal Fortran condition)
+                 statement(s)
+
+.fi
+.in -10
+As with the if, "legal Fortran condition" is something that can go
+into a Fortran logical IF.
+The condition is tested before execution of any of the Ratfor statements,
+so if the condition is not met, the loop will be executed zero times.
+Also, as with the IF, the Ratfor statements can be any valid Ratfor
+or Fortran constructs.  If more than one statement is desired, the
+statements must be enclosed by braces.  For example,
+.nf
+
+.br
+.in +10
+while (getc(c) != EOF)
+               {
+               c = cnvt (c)
+               call putc (c)
+               }
+
+.fi
+.in -10
+
+.bp
+.ce
+FOR
+
+.ti +5
+The "for" statement is similar to the "while" except that it
+allows explicit initialization and increment
+steps as part of the statement.  The syntax is
+.nf
+
+.br
+.in +10
+for (init; condition; increment)
+               statement(s)
+
+.fi
+.in -10
+where "init" is any single Fortran statement which gets done once
+before the loop begins.  "Increment" is any single Fortran statement
+which gets done at the end of each pass through the loop, before the
+test.
+"Condition" is again anything that is legal in a logical IF.
+Any of init, condition, and increment may be omitted, although
+the semicolons must remain.  A non-existent condition is treated
+as always true, so "for( ; ; )" is an indefinite repeat.
+The "for" statement is particularly useful for backward loops,
+chaining along lists, loops that might be done zero times, and
+similar things which are hard to express with a DO statement.
+Here are two examples of "for" loops:
+.nf
+
+.br
+.in +10
+for (i=1; getarg(i, file, MAXLINE) != EOF; i=i+1)
+               {
+               int = open (file, READ)
+               while (getlin (line, int) != EOF)
+                    {
+                    for (j=80; j>0; j=j-1)
+                       call putc (line(j))
+                    }
+               call close (int)
+               }
+
+.fi
+.in -10
+The above code simply reads cards from a list of files, reverses
+the order of the characters, and writes the cards onto a standard
+output file.
+(The "!=" means .NE.)
+
+.bp
+.ce
+REPEAT-UNTIL
+
+.ti +5
+The "repeat-until" statements allow for repetition of a group
+of statements until a specified condition is met.
+The syntax is:
+.nf
+
+.br
+.in +10
+repeat
+               statement(s)
+until
+               condition
+
+.fi
+.in -10
+The "until" is optional.
+Once again, if more than one Ratfor statement is desired, the
+statements must be enclosed by brackets.
+If the "until" part is omitted, the result is an infinite loop
+which must be broken with a "break" or "next" statement (see
+below).
+An example of a repeat-until loop is:
+.br
+
+.nf
+.in +10
+repeat
+               {
+               call putc (BLANK)
+               col = col + 1
+               }
+               until (tabpos(col,tabs) == YES)
+
+.br
+.fi
+.in -10
+
+.bp
+.ce
+BREAK and NEXT
+
+.ti +5
+Ratfor provides statements for leaving a loop early and for
+beginning the next iteration.
+
+.ti +5
+"Break" causes an immediate exit
+from whatever loop it is contained in (which may be a "while",
+"for", or "repeat").  Control resumes with the next statement
+after the loop.
+Only one loop is terminated by a "break", even if the "break"
+is contained inside several nested loops.
+For example:
+
+.br
+.nf
+.in +10
+repeat
+               {
+               if (getc(c) == EOF)  break
+               ...
+               }
+
+.br
+.fi
+.in -10
+.ti +5
+"Next" is a branch to the bottom of the loop, so it causes the
+next iteration to be done.
+"Next" goes to the condition part of a "while" or "until",
+to the top of an infinite "repeat" loop, and to the
+reinitialize part of a "for".
+For example:
+
+.nf
+.br
+.in +10
+for (i=1; i<10; i=i+1)
+               {
+               if (array(i) == BLANK)  next
+               ...
+               }
+
+.fi
+.in -10
+
+.bp
+.ce
+STATEMENT GROUPING AND NULL STATEMENTS
+
+.ti +5
+Ratfor allows a group of statements to be treated as a unit by
+enclosing them in braces -- { and }.
+This is true throughout the language:
+wherever a single Ratfor statement can be used, there could also be
+several enclosed in braces.
+For example:
+
+.nf
+.br
+.in +10
+if (x > 100)
+               {
+               call error (...)
+               err = 1
+               return
+               }
+.in -10
+.fi
+
+.fi
+
+.ti +5
+Ratfor also allows for null statements, most useful after
+"for" and "while" statements.  A semicolon alone indicates
+a null statement.  For instance,
+.br
+
+.in +10
+while (getlin(line, int) != EOF)  ;
+.br
+
+.in -10
+would read lines from a file until the end-of-file was reached
+and
+.br
+
+.in +10
+for (i=1; line(i) == BLANK; i=i+1)  ;
+.br
+
+.in -10
+positions after leading blanks in a line.
+.bp
+.ce
+FREE-FORM INPUT
+
+.ti +5
+Statements may be placed anywhere on a line and several may
+appear on one line if they are separated by semicolons.
+No semicolon is needed at the end of each line because
+Ratfor assumes there is one statement per line unless told
+otherwise.
+Ratfor will, however, continue lines when it seems obvious that they
+are not yet done.
+
+.ti +5
+Any statement that begins with an all-numeric field
+is assumed to be a Fortran label and is
+placed in columns 1-5 upon output.
+
+.bp
+.ce
+COMMENTS
+
+.ti +5
+A sharp character "#" in a line marks the beginning of a comment
+and the rest of the line is considered to be that comment.
+Comments and code can co-exist on the same line.  For example,
+
+.nf
+.br
+.in +10
+function dummy (x)
+# I made up this function to show some comments
+dummy = x         #I am simply returning the parameter
+return
+end
+
+.fi
+.in -10
+
+.bp
+.ce
+CHARACTER TRANSLATION
+
+.ti +5
+Sometimes the characters >, <=, etc. are easier to read in
+Fortran condition
+statements than the
+standard Fortran .EQ., .LT., etc..   Ratfor allows either
+convention.   If the special characters are used, they are translated
+in the following manner:
+
+.nf
+.br
+.in +10
+==          .EQ.
+!=          .NE.
+<           .LT.
+>           .GT.
+<=          .LE.
+>=          .GE.
+|           .OR.
+&           .AND.
+
+.fi
+.in -10
+For example,
+
+.br
+.in +10
+.nf
+for (i=1; i<= 5; i=i+1)
+               ...
+
+if (j != 100)
+               ...
+
+.in -10
+.fi
+
+.bp
+.ce
+STRING DATA TYPE
+
+.ti +5
+All character arrays in Ratfor are sequences of ASCII characters,
+stored right-adjusted, one per array element, with the string
+terminated with an EOS marker.
+An automatic way to initialize string characters arrays is
+provided.
+The syntax is:
+.sp
+.ce
+string name "characters"
+.sp
+Ratfor will define name to be a character (or, more likely, integer)
+array long enough to accomodate the ASCII codes for the
+given character string, one per element.
+The last word of name is initialized to EOS.
+.sp
+For example, the declarations:
+.sp
+.in +5
+string errmsg "error"
+.br
+string done "bye"
+.in -5
+.sp
+would be converted by ratfor into the Fortran:
+.sp
+.in +5
+.nf
+integer error(6)
+data error(1), error(2), error(3), error(4),
+     error(5), error(6) /LETE, LETR, LETR, LETO, LETR, EOS/
+integer done(4)
+data done(1), done(2), done(3), done(4) /LETD, LETO,
+     LETN, LETE, EOS/
+.in -5
+.bp
+.in 0
+.ce
+QUOTED CHARACTER STRINGS
+
+.ti +5
+Text enclosed in matching double quotes is converted to
+nH... format, but is otherwise unaltered.  For instance,
+
+.nf
+.br
+.in +10
+call remark ("Error detected")
+.ti -10
+would translate to
+call remark (14hError detected)
+
+.ti -10
+and
+data string /"Can't find answer"/
+.ti -10
+would become
+data string /17hCan't find answer/
+
+.fi
+.in -10
+
+.ti +5
+Some operating systems are not capable of finding the end of a
+fortran hollerith string.
+In this case it may be necessary for the user to mark the end of
+her quoted string with a specific character, such as a period.
+.bp
+.ce
+DEFINE
+
+.ti +5
+Any string of alphanumeric characters can be defined as a name:
+thereafter, whenever that name occurs in the input (delimited
+by non-alphanumerics) it is replaced by the rest of the definition
+line.
+The syntax is:
+.sp
+.ce
+define(name, replacement string)
+.sp
+which define "name" as a macro which will be replaced with
+"replacement string" when encountered in the source files.
+As a simple example:
+
+.nf
+.br
+.in +10
+define(ROW,10)
+define(COLUMN,25)
+
+dimension array (ROW, COLUMN)
+.ti -10
+and
+
+define(EOF,-1)
+if (getlin(line, fd) == EOF) ....
+
+.in -10
+.fi
+
+
+.ti +5
+Definitions may be included anywhere in the code, as long as they
+appear before the defined name occurs.
+The names of macro may contain letters, digits, periods, and
+underline characters, but must start with a letter.
+Upper and lower cases ARE significant (thus EOF is not the same
+as eof).
+
+.bp
+.ce
+INCLUDE
+
+.ti +5
+Files may be inserted into the input stream via the "include"
+command.
+The statement
+
+.ti +10
+include filename
+.br
+or
+.ti +10
+include "filename"
+
+inserts the file found on input file "filename" into the
+Ratfor input in place of the include statement.  This is
+especially useful in inserting common blocks.  For example,
+
+.nf
+.br
+.in +10
+function exampl (x)
+include comblk
+exampl = x + z
+return
+end
+
+.ti -10
+might translate into
+
+function exampl (x)
+common /comblk/ q, r, z
+exampl = x + z
+return
+end
+
+.fi
+.in -10
+
+
+.bp
+.ce
+IMPLEMENTATION
+
+.ti +5
+Ratfor is written in Ratfor itself, originally brought up
+by a bootstrap written in Fortran.
+
+.ti +5
+Ratfor generates code by reading input files and translating any
+Ratfor keywords into standard Fortran.  Thus, if the first
+token (word) on a source line is not a keyword (like "for", "while",
+etc.) the entire statement is simply copied to the output with
+appropriate character translation and formatting.
+Ratfor knows very little
+Fortran and thus does not handle any Fortran error
+detection.
+Errors in Ratfor keyword syntax are generally noted by a message
+to the user's terminal along with an indication of the source line number
+which caused the problem.
+
+
+.ce
+CONCLUSIONS
+
+.ti +5
+Ratfor demonstrates that with modest effort Fortran-based
+programmers can increase their productivity by using
+a language that provides them with the control structures
+and cosmetic features essential for structured programming
+design.
+Debugging and subsequent revision times are much faster
+than the equivalent efforts in Fortran, mainly because
+the code can be easily read.  Thus it becomes easier to
+write code that is readable, reliable, and even esthetically
+pleasing,
+as well as being portable to other environments.
+.bp
+.in 0
+.ce
+EXAMPLE
+.sp
+.ti +5
+The following is a sample Ratfor tool designed to show
+some of the commonly-used Ratfor commands.  The routine
+reads through a list of files, counting the lines as it goes.
+
+.br
+.nf
+# This is an example of a routine written in Ratfor
+# Symbols such as EOF, ERR, MAXLINE, character and filedes are
+# automatically defined (i.e. a file containing them is included)
+# by the preprocessor
+
+## count - counts lines in files
+DRIVER(count)
+
+include comblk     # this file contains a common block which
+                   # contains a variable "linect"
+
+character file(FILENAMESIZE), line(MAXLINE)
+integer i
+filedes fd
+integer getarg, open, getlin
+string total "total lines: "
+
+call query ("usage:  count file.")
+linect = 0
+                     #loop through the list of files
+for (i=1; getarg(i, file, FILENAMESIZE) != EOF; i=i+1)
+      {
+      fd = open (file, READ)      # open (attach) the file
+      if (fd == ERR)              # file could not be located
+           call cant (file)
+      while (getlin(line, fd) != EOF)   # read and count lines
+               linect = linect + 1
+      call close (fd)              # close (unattach) the file
+      }
+
+call putlin(total, STDOUT)
+call putint (linect, 5, STDOUT)
+call putch (NEWLINE, STDOUT)
+DRETURN
+end
+
+
+.fi
+.bp
+
+.ce
+SEE ALSO
+
+1)  Kernighan, Brian W., "Ratfor--a Preprocessor for a Rational
+Fortran".
+Software - Practice and Experience,
+Vol. 5, 4 (Oct-Dec 75), pp. 395-406.
+
+2)  Kernighan, Brian W. and P. J. Plauger, "Software Tools".
+Addison-Wesley Publishing Company, Reading, Mass., 1976.
+
+3)  The ratfor user document

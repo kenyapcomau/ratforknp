@@ -1,0 +1,104 @@
+.bp 1
+.in 0
+.he 'TR (1)'07/06/78'TR (1)'
+.fo ''-#-''
+.fi
+.in 7
+.ti -7
+NAME
+.br
+tr - character transliteration
+.sp 1
+.ti -7
+SYNOPSIS
+.br
+tr <infile >outfile from [to]
+.sp 1
+.ti -7
+DESCRIPTION
+.br
+"TR" copies the standard input to the standard output with
+substitution or deletion of selected characters.  Input
+characters found in "FROM" are mapped into the corresponding
+characters of "TO".
+Ranges of characters may be specified by separating
+the extremes by a dash.
+For example, a-z stands for the string of characters whose ascii
+codes run from character a through character z.
+
+If the number of characters
+in "FROM" is the same as in "TO", a one to one corresponding
+translation will be performed on all occurrences of the characters
+in "FROM".
+If the number of characters in "FROM" is more than in "TO", the
+implication is that the last character in the "TO" string is
+to be replicated as often as necessary to make a string as long
+as the "FROM" string, and that this replicated character should
+be collapsed into only one.  If the "TO" string is missing or
+empty, "TR" will take this condition as a request to delete
+all occurrences of characters in the "FROM" string.
+.sp 1
+"TR" differs from the tool "CH" since it deals only with
+single characters or ranges of characters, while "CH" deals
+with character strings.  For example  tr xy yx  would change
+all x's into y's and all y's into x's, whereas ch xy yx
+change all the patterns "xy" into "yx".
+.sp 1
+One of the most common functions of "TR" is to translate
+upper case letters to lower case, and vice versa.  Thus,
+
+.ce
+tr A-Z a-z
+
+would map all upper case letters to lower
+case.
+Users of systems which cannot pass
+both upper and lower case characters on a command line
+should remember to include the appropriate escape flags.
+.sp 1
+.ti -7
+FILES
+.br
+None
+.sp 1
+.ti -7
+SEE ALSO
+.br
+.nf
+find, ch, edit, sedit
+The "Software Tools" book, p. 51-61.
+The "UNIX Programmer's Manual", p. TR(I).
+.fi
+.sp 1
+.ti -7
+DIAGNOSTICS
+.br
+"usage: translit from to."
+.br
+.in +5
+The command line passed to transit is in error.
+.br
+.in -5
+"from: too large."
+.br
+.in +5
+The string for "from" is too large.  Current limit is 100 characters
+including E0S.
+.br
+.in -5
+"to: too large."
+.br
+.in +5
+The string for "to" is too large.  Current limit is 100 characters
+including EOS.
+.sp 1
+.in -5
+.ti -7
+AUTHORS
+.br
+Original code from Kernighan and Plauger's "Software Tools",
+with minor modifications by Debbie Scherrer.
+.sp 1
+.ti -7
+BUGS/DEFICIENCIES
+.br

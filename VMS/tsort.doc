@@ -1,0 +1,109 @@
+.bp 1
+.in 0
+.he 'TSORT (1)'10/1/78'TSORT (1)'
+.sp 2
+.in +3
+.fi
+.ti -3
+NAME
+.br
+tsort - topologically sort symbols
+.nf
+.sp
+.ti -3
+SYNOPSIS
+.br
+tsort [files ...]
+.fi
+.sp
+.ti -3
+DESCRIPTION
+.br
+Tsort
+topologically sorts the symbols in the named files.
+If no files are specified, or the filename '-' is given,
+tsort reads the standard input.
+
+A symbol is considered any string of characters delimited
+by blanks or tabs.
+
+Each line of the input is assumed to be of the form
+.sp
+.in +3
+.nf
+a b c ...
+.in -3
+.sp
+.fi
+which states that
+a
+precedes
+b, a
+precedes
+c,
+and so on.
+Note that there is nothing implied about the ordering of
+b
+and
+c.
+A line consisting of a single symbol simply "declares"
+that symbol without specifying any ordering relations about it.
+The output is a topologically sorted
+list of symbols, one per line.
+.sp
+.fi
+For example, suppose you have trouble getting up in the morning
+because you can't quite remember what actions have to be
+performed in which order.
+However, you do know that the first action in the following
+list precedes all others on the line:
+
+.in +5
+.nf
+set_alarm   turn_off_alarm
+wake_up    get_out_of_bed    turn_off_alarm
+set_alarm     wake_up
+.in -5
+.fi
+
+Using tsort to sort the above list would produce the following
+set of actions for getting out of bed:
+
+.in +5
+.nf
+set_alarm
+wake_up
+turn_off_alarm
+get_out_of_bed
+.fi
+.in -5
+.sp
+.ne 2
+.ti -3
+DIAGNOSTICS
+.br
+circular
+.br
+.in +3
+The input specifies a graph that contains at least one cycle.
+.in -3
+.sp
+out of storage
+.br
+.in +3
+The input is too large.
+The size of tsort's buffer is determined by the MAXBUF
+definition in the source code.
+.in -3
+.sp
+.ne 2
+.ti -3
+SEE ALSO
+.br
+sort
+.ne 3
+.sp
+.ti -3
+AUTHORS
+.br
+David Hanson and friends (U. of Arizona)
